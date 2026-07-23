@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:safeseat_mini/core/theme/app_theme.dart';
 import 'package:safeseat_mini/data/models/request_driver_model.dart';
 import 'package:safeseat_mini/data/models/review_model.dart';
-import 'package:safeseat_mini/data/repositories/request_driver_repository.dart';
+import 'package:safeseat_mini/features/history/controllers/history_controller.dart';
 
 class HistoryTripReviewScreen extends ConsumerStatefulWidget {
   final RequestDriverModel trip;
@@ -476,33 +476,15 @@ class _HistoryTripReviewScreenState extends ConsumerState<HistoryTripReviewScree
                           );
 
                           try {
-                            final repo = ref.read(requestDriverRepositoryProvider);
-                            
-                            // Submit D1 (Leader) Review
-                            if (_driverRating > 0 && widget.trip.leader != null) {
-                              final review = ReviewModel(
-                                requestId: widget.trip.requestId,
-                                driverUsername: widget.trip.leader!.username,
-                                reviewRate: _driverRating,
-                                reviewComment: _driverCommentController.text.trim().isNotEmpty
-                                    ? _driverCommentController.text.trim()
-                                    : null,
-                              );
-                              await repo.createReview(review);
-                            }
-
-                            // Submit D2 (Follower) Review
-                            if (_coDriverRating > 0 && widget.trip.follower != null) {
-                              final review = ReviewModel(
-                                requestId: widget.trip.requestId,
-                                driverUsername: widget.trip.follower!.username,
-                                reviewRate: _coDriverRating,
-                                reviewComment: _coDriverCommentController.text.trim().isNotEmpty
-                                    ? _coDriverCommentController.text.trim()
-                                    : null,
-                              );
-                              await repo.createReview(review);
-                            }
+                            await ref.read(historyReviewControllerProvider.notifier).submitTripReviews(
+                              requestId: widget.trip.requestId,
+                              leaderUsername: widget.trip.leader?.username,
+                              leaderRating: _driverRating,
+                              leaderComment: _driverCommentController.text,
+                              followerUsername: widget.trip.follower?.username,
+                              followerRating: _coDriverRating,
+                              followerComment: _coDriverCommentController.text,
+                            );
 
                             if (!context.mounted) return;
                             // Hide loading indicator

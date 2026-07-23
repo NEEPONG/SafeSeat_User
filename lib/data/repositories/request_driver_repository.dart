@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:safeseat_mini/core/constants/api_constants.dart';
 import 'package:safeseat_mini/data/models/request_driver_model.dart';
 import 'package:safeseat_mini/data/models/review_model.dart';
+import 'package:safeseat_mini/data/models/driver_report_model.dart';
 
 class RequestDriverRepository {
   Future<int?> createRequest({
@@ -110,6 +111,28 @@ class RequestDriverRepository {
       'hasReviewed': false,
       'reviews': <ReviewModel>[],
     };
+  }
+
+  Future<bool> createDriverReport(DriverReportModel report) async {
+    final url = Uri.parse('${ApiConstants.baseUrl}/api/driver-reports');
+    final response = await http.post(
+      url,
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode(report.toJson()),
+    );
+
+    return response.statusCode == 201;
+  }
+
+  Future<List<DriverReportModel>> getReportsByUser(String userId) async {
+    final url = Uri.parse('${ApiConstants.baseUrl}/api/driver-reports?userId=$userId');
+    final response = await http.get(url, headers: {'Content-Type': 'application/json'});
+
+    if (response.statusCode == 200) {
+      final List list = jsonDecode(response.body);
+      return list.map((json) => DriverReportModel.fromJson(json)).toList();
+    }
+    return [];
   }
 }
 

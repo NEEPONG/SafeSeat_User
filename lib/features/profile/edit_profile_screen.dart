@@ -5,7 +5,6 @@ import 'package:safeseat_mini/features/profile/controllers/profile_controller.da
 import 'package:safeseat_mini/data/models/car_model.dart';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 class EditProfileScreen extends ConsumerStatefulWidget {
   const EditProfileScreen({super.key});
@@ -25,7 +24,6 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   int? _selectedGender;
   String? _profileImagePath;
   File? _selectedImage;
-  bool _isUploadingImage = false;
 
   Future<void> _pickImage() async {
     final picker = ImagePicker();
@@ -62,50 +60,20 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
 
   void _saveProfile() async {
     if (_formKey.currentState!.validate()) {
-      setState(() {
-        _isUploadingImage = true;
-      });
-
       final currentUser = ref.read(userProvider);
       if (currentUser == null) return;
       
       final scaffoldMessenger = ScaffoldMessenger.of(context);
       final navigator = Navigator.of(context);
 
-      String? newImagePath = _profileImagePath;
-
-      if (_selectedImage != null) {
-        try {
-          final timestamp = DateTime.now().millisecondsSinceEpoch;
-          final fileName = '${currentUser.phoneNo}_$timestamp.jpg';
-          
-          await Supabase.instance.client.storage
-              .from('userimages')
-              .upload(fileName, _selectedImage!);
-
-          newImagePath = Supabase.instance.client.storage
-              .from('userimages')
-              .getPublicUrl(fileName);
-        } catch (e) {
-          scaffoldMessenger.showSnackBar(
-            const SnackBar(content: Text('อัปโหลดรูปภาพไม่สำเร็จ')),
-          );
-          setState(() {
-            _isUploadingImage = false;
-          });
-          return;
-        }
-      }
-
-      final updatedUser = currentUser.copyWith(
+      final success = await ref.read(profileControllerProvider.notifier).editProfileWithImage(
+        currentUser: currentUser,
         name: _nameController.text,
         email: _emailController.text,
         gender: _selectedGender,
-        mainAddress: _addressController.text,
-        profileImagePath: newImagePath,
+        address: _addressController.text,
+        selectedImage: _selectedImage,
       );
-
-      final success = await ref.read(profileControllerProvider.notifier).editProfile(updatedUser);
 
       if (success && mounted) {
         scaffoldMessenger.showSnackBar(
@@ -116,9 +84,6 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
         scaffoldMessenger.showSnackBar(
           const SnackBar(content: Text('บันทึกข้อมูลไม่สำเร็จ กรุณาลองใหม่')),
         );
-        setState(() {
-          _isUploadingImage = false;
-        });
       }
     }
   }
@@ -247,6 +212,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isLoading = ref.watch(profileControllerProvider);
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
@@ -571,12 +537,12 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
           width: double.infinity,
           height: 54,
           child: ElevatedButton.icon(
-            onPressed: _isUploadingImage ? null : _saveProfile,
-            icon: _isUploadingImage 
+            onPressed: isLoading ? null : _saveProfile,
+            icon: isLoading 
                 ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
                 : const Icon(Icons.save_outlined, color: Colors.white),
             label: Text(
-              _isUploadingImage ? 'กำลังบันทึก...' : 'บันทึกการแก้ไข',
+              isLoading ? 'กำลังบันทึก...' : 'บันทึกการแก้ไข',
               style: const TextStyle(
                 color: Colors.white,
                 fontSize: 16,

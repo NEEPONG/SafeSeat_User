@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:safeseat_mini/core/theme/app_theme.dart';
 import 'package:safeseat_mini/core/controllers/user_controller.dart';
 import 'package:safeseat_mini/features/history/controllers/history_controller.dart';
 import 'package:safeseat_mini/features/history/history_trip_details_screen.dart';
+import 'package:safeseat_mini/features/history/history_report_details_screen.dart';
 import 'package:safeseat_mini/features/request_driver/active_trip_screen.dart';
 import 'package:safeseat_mini/features/request_driver/waiting_driver_screen.dart';
 import 'package:latlong2/latlong.dart';
@@ -35,6 +37,8 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
     
     if (_selectedTab != 3) {
       ref.invalidate(historyListProvider(type));
+    } else {
+      ref.invalidate(userReportsListProvider);
     }
   }
 
@@ -163,33 +167,219 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
 
   Widget _buildTabContent() {
     if (_selectedTab == 3) {
-      // Reports tab remains as a clean placeholder since it is not requestbyuser database backed
-      return Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(32),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFFE2E8F0)),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.report_gmailerrorred_rounded,
-              size: 48,
-              color: Colors.grey[400],
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'ไม่มีรายงานการเดินทาง',
-              style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w500,
-                color: Colors.grey[500],
+      final reportsAsync = ref.watch(userReportsListProvider);
+
+      return reportsAsync.when(
+        data: (reports) {
+          if (reports.isEmpty) {
+            return Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(32),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
               ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.report_gmailerrorred_rounded,
+                    size: 48,
+                    color: Colors.grey[400],
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'ไม่มีรายงานการเดินทาง',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.grey[500],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }
+
+          return ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: reports.length,
+            itemBuilder: (context, index) {
+              final report = reports[index];
+              final dateStr = report.reportDate != null
+                  ? '${report.reportDate!.day}/${report.reportDate!.month}/${report.reportDate!.year} • ${report.reportDate!.hour.toString().padLeft(2, '0')}:${report.reportDate!.minute.toString().padLeft(2, '0')}'
+                  : '';
+              
+              final statusColor = report.reportStatus == 'กำลังดำเนินการ'
+                  ? const Color(0xFFF97316)
+                  : const Color(0xFF10B981);
+                  
+              final statusBgColor = report.reportStatus == 'กำลังดำเนินการ'
+                  ? const Color(0xFFFFF7ED)
+                  : const Color(0xFFECFDF5);
+
+              // Extract driver names from requestByUser map
+              String driverInfo = 'ไม่มีข้อมูลคนขับ';
+              final req = report.requestByUser;
+              if (req != null) {
+                final leader = req['leader'];
+                final follower = req['follower'];
+                final List<String> drivers = [];
+                if (leader != null) {
+                  drivers.add('คนขับหลัก: ${leader['firstname']} ${leader['lastname']}');
+                }
+                if (follower != null) {
+                  drivers.add('ผู้ติดตาม: ${follower['firstname']} ${follower['lastname']}');
+                }
+                if (drivers.isNotEmpty) {
+                  driverInfo = drivers.join('\n');
+                }
+              }
+
+              // Parse image thumbnail path if exists
+              String? firstImageUrl;
+              if (report.reportImagePath != null && report.reportImagePath!.isNotEmpty) {
+                final paths = report.reportImagePath!.split(',').where((p) => p.trim().isNotEmpty).toList();
+                if (paths.isNotEmpty) {
+                  firstImageUrl = Supabase.instance.client.storage.from('images').getPublicUrl(paths.first);
+                }
+              }
+
+              return Container(
+                margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: const Color(0xFFF1F5F9)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.02),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: InkWell(
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => HistoryReportDetailsScreen(report: report),
+                      ),
+                    );
+                  },
+                  borderRadius: BorderRadius.circular(20),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: statusBgColor,
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Text(
+                                      report.reportStatus ?? 'กำลังดำเนินการ',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                        color: statusColor,
+                                      ),
+                                    ),
+                                  ),
+                                  Text(
+                                    dateStr,
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: Color(0xFF64748B),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                report.reportType,
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF0F172A),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                driverInfo,
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  color: Color(0xFF475569),
+                                  height: 1.4,
+                                ),
+                              ),
+                              if (report.reportDetail != null && report.reportDetail!.isNotEmpty) ...[
+                                const SizedBox(height: 8),
+                                Text(
+                                  report.reportDetail!,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: Color(0xFF94A3B8),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                        if (firstImageUrl != null) ...[
+                          const SizedBox(width: 16),
+                          Container(
+                            width: 60,
+                            height: 60,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: const Color(0xFFE2E8F0)),
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(11),
+                              child: Image.network(
+                                firstImageUrl,
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) => const Icon(Icons.broken_image, size: 24),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
+          );
+        },
+        loading: () => const Center(
+          child: Padding(
+            padding: EdgeInsets.all(32.0),
+            child: CircularProgressIndicator(),
+          ),
+        ),
+        error: (err, stack) => Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32.0),
+            child: Text(
+              'เกิดข้อผิดพลาดในการโหลดรายงาน: $err',
+              style: const TextStyle(color: Colors.red),
             ),
-          ],
+          ),
         ),
       );
     }

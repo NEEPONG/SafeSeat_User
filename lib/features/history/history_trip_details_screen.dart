@@ -5,8 +5,9 @@ import 'package:latlong2/latlong.dart';
 import 'package:safeseat_mini/core/theme/app_theme.dart';
 import 'package:safeseat_mini/data/models/request_driver_model.dart';
 import 'package:safeseat_mini/data/models/review_model.dart';
-import 'package:safeseat_mini/data/repositories/request_driver_repository.dart';
+import 'package:safeseat_mini/features/history/controllers/history_controller.dart';
 import 'package:safeseat_mini/features/history/history_trip_review_screen.dart';
+import 'package:safeseat_mini/features/history/history_trip_report_screen.dart';
 
 class HistoryTripDetailsScreen extends ConsumerStatefulWidget {
   final RequestDriverModel trip;
@@ -30,8 +31,8 @@ class _HistoryTripDetailsScreenState extends ConsumerState<HistoryTripDetailsScr
   Future<void> _checkReviewStatus() async {
     try {
       final checkResult = await ref
-          .read(requestDriverRepositoryProvider)
-          .checkReview(widget.trip.requestId);
+          .read(historyReviewControllerProvider.notifier)
+          .checkReviewStatus(widget.trip.requestId);
       if (mounted) {
         setState(() {
           _hasReviewed = checkResult['hasReviewed'] ?? false;
@@ -881,8 +882,10 @@ class _HistoryTripDetailsScreenState extends ConsumerState<HistoryTripDetailsScr
                         height: 52,
                         child: OutlinedButton.icon(
                           onPressed: () {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('กำลังส่งรายงานคนขับ...')),
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (context) => HistoryTripReportScreen(trip: trip),
+                              ),
                             );
                           },
                           icon: const Icon(Icons.error_outline_rounded, color: Color(0xFF64748B)),
