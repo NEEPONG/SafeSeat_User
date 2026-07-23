@@ -1,3 +1,5 @@
+import 'package:safeseat_mini/data/models/car_model.dart';
+
 class DriverProfileModel {
   final String username;
   final String firstname;
@@ -94,6 +96,7 @@ class RequestDriverModel {
   final BuddyTeamModel? buddyTeam;
   final DriverProfileModel? leader;
   final DriverProfileModel? follower;
+  final CarModel? userCar;
 
   RequestDriverModel({
     required this.requestId,
@@ -115,6 +118,7 @@ class RequestDriverModel {
     this.buddyTeam,
     this.leader,
     this.follower,
+    this.userCar,
   });
 
   factory RequestDriverModel.fromJson(Map<String, dynamic> json) {
@@ -138,6 +142,7 @@ class RequestDriverModel {
       buddyTeam: json['buddyteam'] != null ? BuddyTeamModel.fromJson(json['buddyteam']) : null,
       leader: json['leader'] != null ? DriverProfileModel.fromJson(json['leader']) : null,
       follower: json['follower'] != null ? DriverProfileModel.fromJson(json['follower']) : null,
+      userCar: json['usercar'] != null ? CarModel.fromJson(json['usercar']) : null,
     );
   }
 
@@ -162,6 +167,7 @@ class RequestDriverModel {
       'buddyteam': buddyTeam?.toJson(),
       'leader': leader?.toJson(),
       'follower': follower?.toJson(),
+      'usercar': userCar?.toJson(),
     };
   }
 }

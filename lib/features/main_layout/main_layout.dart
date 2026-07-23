@@ -4,6 +4,8 @@ import 'package:safeseat_mini/core/theme/app_theme.dart';
 import 'package:safeseat_mini/features/home/home_screen.dart';
 import 'package:safeseat_mini/features/profile/profile_screen.dart';
 import 'package:safeseat_mini/core/controllers/user_controller.dart';
+import 'package:safeseat_mini/features/profile/wallet_screen.dart';
+import 'package:safeseat_mini/features/history/history_screen.dart';
 
 class MainLayout extends ConsumerStatefulWidget {
   const MainLayout({super.key});
@@ -22,8 +24,14 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
     super.initState();
     _screens = [
       const HomeScreen(),
-      const Center(child: Text('History Screen')), // Placeholder
-      const Center(child: Text('Wallet Screen')), // Placeholder
+      const HistoryScreen(),
+      WalletScreen(
+        onBackToHome: () {
+          setState(() {
+            _currentIndex = 0;
+          });
+        },
+      ),
       const ProfileScreen(),
     ];
   }

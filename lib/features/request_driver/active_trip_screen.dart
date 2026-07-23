@@ -10,6 +10,7 @@ import 'package:safeseat_mini/features/profile/controllers/profile_controller.da
 import 'package:safeseat_mini/core/controllers/user_controller.dart';
 import 'package:safeseat_mini/core/services/route_service.dart';
 import 'package:safeseat_mini/data/models/request_driver_model.dart';
+import 'package:share_plus/share_plus.dart';
 
 class ActiveTripScreen extends ConsumerStatefulWidget {
   final int requestId;
@@ -232,6 +233,14 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
     );
   }
 
+  void _shareTripLink() {
+    final String shareUrl = 'http://localhost:5000/trip?id=${widget.requestId}';
+    Share.share(
+      'ฉันกำลังเดินทางด้วย SafeSeat! คุณสามารถติดตามพิกัดสดและสถานะการเดินทางของฉันได้ที่นี่: $shareUrl',
+      subject: 'ติดตามการเดินทางของฉัน (SafeSeat)',
+    );
+  }
+
   // Map status string to Thai display text and color/icon
   Map<String, dynamic> _getStatusUI() {
     final status = _currentStatus;
@@ -417,6 +426,21 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
               onPressed: _fitMapBounds,
               shape: const CircleBorder(),
               child: const Icon(Icons.my_location),
+            ),
+          ),
+
+          // Share Trip Button
+          Positioned(
+            right: 16,
+            top: MediaQuery.of(context).padding.top + 72,
+            child: FloatingActionButton.small(
+              heroTag: 'share_trip_btn',
+              backgroundColor: Colors.white,
+              foregroundColor: AppTheme.primaryColor,
+              elevation: 4,
+              onPressed: _shareTripLink,
+              shape: const CircleBorder(),
+              child: const Icon(Icons.share),
             ),
           ),
 

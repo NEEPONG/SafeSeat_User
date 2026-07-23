@@ -21,13 +21,13 @@ class CarModel {
 
   factory CarModel.fromJson(Map<String, dynamic> json) {
     return CarModel(
-      userCarId: json['usercarid'],
-      carBrand: json['carbrand'],
-      carColor: json['carcolor'],
-      carModel: json['carmodel'],
-      carPlate: json['carplate'],
-      carType: json['car_type'],
-      userId: json['user_id'],
+      userCarId: json['usercarid'] ?? 0,
+      carBrand: json['carbrand'] ?? '',
+      carColor: json['carcolor'] ?? '',
+      carModel: json['carmodel'] ?? '',
+      carPlate: json['carplate'] ?? '',
+      carType: json['car_type'] ?? 0,
+      userId: json['user_id'] ?? '',
       carTypeName: json['cartype'] != null ? json['cartype']['cartypename'] : null,
     );
   }
