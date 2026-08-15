@@ -57,20 +57,25 @@ class _WaitingDriverScreenState extends ConsumerState<WaitingDriverScreen> with 
   }
 
   Future<void> _checkRequestStatus() async {
+    if (!mounted) return;
     try {
       final request = await ref
           .read(requestDriverControllerProvider.notifier)
           .checkRequestStatus(widget.requestId);
 
+      if (!mounted) return;
+
       if (request != null) {
         final status = request.requestStatus;
         if (status != 'กำลังค้นหาคนขับ') {
           _statusTimer?.cancel();
-          setState(() {
-            _statusMessage = 'พบคนขับและรับงานเรียบร้อยแล้ว!';
-            _acceptedRequest = request;
-          });
-          _showSuccessDialog();
+          if (mounted) {
+            setState(() {
+              _statusMessage = 'พบคนขับและรับงานเรียบร้อยแล้ว!';
+              _acceptedRequest = request;
+            });
+            _showSuccessDialog();
+          }
         }
       }
     } catch (e) {
@@ -80,23 +85,25 @@ class _WaitingDriverScreenState extends ConsumerState<WaitingDriverScreen> with 
 
   Future<void> _cancelRequest() async {
     if (_isCancelling) return;
-    setState(() {
-      _isCancelling = true;
-    });
+    if (mounted) {
+      setState(() {
+        _isCancelling = true;
+      });
+    }
 
     try {
       final success = await ref
           .read(requestDriverControllerProvider.notifier)
           .cancelRequest(widget.requestId);
 
+      if (!mounted) return;
+
       if (success) {
         _statusTimer?.cancel();
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('ยกเลิกรายการเรียกรถสำเร็จ')),
-          );
-          Navigator.of(context).pop(); // Go back to details
-        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('ยกเลิกรายการเรียกรถสำเร็จ')),
+        );
+        Navigator.of(context).pop(); // Go back to details
       } else {
         throw Exception('Failed to cancel request on server');
       }
@@ -122,7 +129,7 @@ class _WaitingDriverScreenState extends ConsumerState<WaitingDriverScreen> with 
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(24),
         ),
@@ -185,17 +192,28 @@ class _WaitingDriverScreenState extends ConsumerState<WaitingDriverScreen> with 
         actions: [
           ElevatedButton(
             onPressed: () {
-              Navigator.of(context).pop(); // pop dialog
-              
               final reqState = ref.read(requestDriverControllerProvider);
+              final request = _acceptedRequest;
+              // Prefer the server-confirmed coordinates from the accepted request,
+              // then fall back to controller state (never two identical defaults).
+              final pickupLatLng = request != null
+                  ? LatLng(request.pickupLatitude, request.pickupLongitude)
+                  : (reqState.pickupLatLng ?? const LatLng(18.8972, 99.0112));
+              final dropoffLatLng = request != null
+                  ? LatLng(request.dropoffLatitude, request.dropoffLongitude)
+                  : (reqState.dropoffLatLng ?? const LatLng(18.8972, 99.0112));
+
+              Navigator.of(dialogContext).pop(); // pop dialog
+              if (!mounted) return;
+
               Navigator.of(context).pushAndRemoveUntil(
                 MaterialPageRoute(
                   builder: (context) => ActiveTripScreen(
                     requestId: widget.requestId,
                     pickupAddress: widget.pickupAddress,
                     dropoffAddress: widget.dropoffAddress,
-                    pickupLatLng: reqState.pickupLatLng ?? const LatLng(18.8972, 99.0112),
-                    dropoffLatLng: reqState.dropoffLatLng ?? const LatLng(18.8972, 99.0112),
+                    pickupLatLng: pickupLatLng,
+                    dropoffLatLng: dropoffLatLng,
                     carDetails: widget.carDetails,
                     price: widget.price,
                     initialRequestData: _acceptedRequest,

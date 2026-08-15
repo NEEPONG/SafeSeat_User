@@ -44,8 +44,18 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
   List<LatLng> _routePoints = [];
   bool _isLoadingRoute = true;
   LatLng? _driverLatLng;
-  
-  String _currentStatus = 'going to pickup';
+
+  // ~11 meters: ignore sub-meter GPS jitter so the route isn't recomputed
+  // on every poll while the driver is stationary.
+  static const double _locationTolerance = 0.0001;
+  bool _hasFittedCamera = false;
+
+  // Trip endpoints. Source of truth is the polled request data (server),
+  // initialized from the constructor values and refreshed on every poll.
+  late LatLng _pickupLatLng;
+  late LatLng _dropoffLatLng;
+
+  String _currentStatus = 'กำลังค้นหาคนขับ';
   DriverProfileModel? _leaderDriver;
   DriverProfileModel? _followerDriver;
   double _tripPrice = 0.0;
@@ -53,6 +63,8 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
   @override
   void initState() {
     super.initState();
+    _pickupLatLng = widget.pickupLatLng;
+    _dropoffLatLng = widget.dropoffLatLng;
     _tripPrice = widget.price;
     
     // Populate from initial data if available
@@ -73,12 +85,47 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
     super.dispose();
   }
 
+  /// Maps backend/driver status variants to the canonical strings the UI understands.
+  /// e.g. 'ถึงจุดรับแล้ว' == 'ถึงจุดนัดหมาย' and 'ระหว่างเดินทาง' == 'กำลังเดินทาง'
+  String _normalizeStatus(String status) {
+    switch (status) {
+      case 'ถึงจุดรับแล้ว':
+        return 'ถึงจุดนัดหมาย';
+      case 'ระหว่างเดินทาง':
+        return 'กำลังเดินทาง';
+      default:
+        return status;
+    }
+  }
+
   void _parseRequestData(RequestDriverModel data) {
+    bool locationChanged = false;
+    bool endpointsChanged = false;
+    final String normalizedStatus = _normalizeStatus(data.requestStatus);
+    final bool statusChanged = normalizedStatus != _currentStatus;
+
     setState(() {
-      _currentStatus = data.requestStatus;
+      _currentStatus = normalizedStatus;
       _leaderDriver = data.leader;
       _followerDriver = data.follower;
       _tripPrice = data.requestFee;
+
+      // Keep pickup/dropoff in sync with the server's request data
+      // (the source of truth), so the pins/route never go stale.
+      if (data.pickupLatitude != 0.0 || data.pickupLongitude != 0.0) {
+        final newPickup = LatLng(data.pickupLatitude, data.pickupLongitude);
+        if (newPickup != _pickupLatLng) {
+          _pickupLatLng = newPickup;
+          endpointsChanged = true;
+        }
+      }
+      if (data.dropoffLatitude != 0.0 || data.dropoffLongitude != 0.0) {
+        final newDropoff = LatLng(data.dropoffLatitude, data.dropoffLongitude);
+        if (newDropoff != _dropoffLatLng) {
+          _dropoffLatLng = newDropoff;
+          endpointsChanged = true;
+        }
+      }
  
       // Check if buddyteam coordinates exist
       final buddyteam = data.buddyTeam;
@@ -87,10 +134,27 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
         final double? lng = buddyteam.currentLocLng;
         
         if (lat != null && lng != null && lat != 0.0 && lng != 0.0) {
-          _driverLatLng = LatLng(lat, lng);
+          final newDriverPos = LatLng(lat, lng);
+          // Only count as "moved" when the change is meaningful (GPS jitter
+          // tolerance) so the route isn't recomputed every poll.
+          final bool driverMoved = _driverLatLng == null ||
+              (lat - _driverLatLng!.latitude).abs() > _locationTolerance ||
+              (lng - _driverLatLng!.longitude).abs() > _locationTolerance;
+          if (driverMoved) {
+            _driverLatLng = newDriverPos;
+            locationChanged = true;
+          }
         }
       }
     });
+
+    // Reload the route whenever the driver moves, the trip status changes,
+    // or the server endpoints get corrected. Only re-fit the camera when the
+    // trip layout itself changes (first load, status/direction, endpoints);
+    // live driver movement should update the polyline without jumping the map.
+    if (locationChanged || statusChanged || endpointsChanged) {
+      _loadRoute(shouldFit: statusChanged || endpointsChanged || !_hasFittedCamera);
+    }
 
     // If trip completed, stop polling and refresh wallet
     if (_currentStatus == 'เสร็จสิ้น') {
@@ -99,25 +163,57 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
     }
   }
 
-  Future<void> _loadRoute() async {
+  Future<void> _loadRoute({bool shouldFit = true}) async {
     setState(() {
       _isLoadingRoute = true;
     });
 
+    // Start route from driver (buddyteam) location if available, else pickup location
+    final startLatLng = _driverLatLng ?? _pickupLatLng;
+
+    // While the driver is still coming to pick the user up, draw the FULL
+    // journey (driver -> pickup -> destination) so the polyline always ends
+    // at the final destination. Once the trip is underway, route straight
+    // from the driver's position to the destination.
+    final bool headingToPickup =
+        _currentStatus == 'กำลังไปรับ' ||
+        _currentStatus == 'กำลังค้นหาคนขับ' ||
+        _currentStatus == 'รอคนขับ';
+
     try {
-      final routeDetails = await RouteService.getRouteDetails(widget.pickupLatLng, widget.dropoffLatLng);
+      final List<LatLng> points = [];
+      if (headingToPickup) {
+        // Leg 1: driver -> pickup (skipped when no driver location yet)
+        if (startLatLng != _pickupLatLng) {
+          final leg1 = await RouteService.getRouteDetails(startLatLng, _pickupLatLng);
+          points.addAll(leg1?.points ?? [startLatLng, _pickupLatLng]);
+        }
+        // Leg 2: pickup -> destination (always shown)
+        final leg2 = await RouteService.getRouteDetails(_pickupLatLng, _dropoffLatLng);
+        points.addAll(leg2?.points ?? [_pickupLatLng, _dropoffLatLng]);
+      } else {
+        // Driver (or pickup) -> destination
+        final routeDetails = await RouteService.getRouteDetails(startLatLng, _dropoffLatLng);
+        points.addAll(routeDetails?.points ?? [startLatLng, _dropoffLatLng]);
+      }
+
       if (mounted) {
         setState(() {
-          _routePoints = routeDetails?.points ?? [widget.pickupLatLng, widget.dropoffLatLng];
+          _routePoints = points;
           _isLoadingRoute = false;
         });
-        
-        _fitMapBounds();
+
+        if (shouldFit) {
+          _fitMapBounds();
+          _hasFittedCamera = true;
+        }
       }
     } catch (e) {
       if (mounted) {
         setState(() {
-          _routePoints = [widget.pickupLatLng, widget.dropoffLatLng];
+          _routePoints = headingToPickup
+              ? [startLatLng, _pickupLatLng, _dropoffLatLng]
+              : [startLatLng, _dropoffLatLng];
           _isLoadingRoute = false;
         });
       }
@@ -125,12 +221,19 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
   }
 
   void _fitMapBounds() {
-    if (_routePoints.isEmpty) return;
+    final pointsToFit = <LatLng>[];
+    if (_driverLatLng != null) {
+      pointsToFit.add(_driverLatLng!);
+    }
+    pointsToFit.add(_pickupLatLng);
+    pointsToFit.add(_dropoffLatLng);
+
+    if (pointsToFit.isEmpty) return;
     
-    // Fit map bounds to show both pickup and dropoff
+    // Fit map bounds to show driver position, pickup and dropoff
     _mapController.fitCamera(
       CameraFit.bounds(
-        bounds: LatLngBounds(widget.pickupLatLng, widget.dropoffLatLng),
+        bounds: LatLngBounds.fromPoints(pointsToFit),
         padding: const EdgeInsets.symmetric(horizontal: 60.0, vertical: 80.0),
       ),
     );
@@ -140,8 +243,8 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
     // Poll immediately on start
     _checkStatus();
 
-    // Setup periodic polling every 5 seconds
-    _statusTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+    // Setup periodic polling every 10 seconds
+    _statusTimer = Timer.periodic(const Duration(seconds: 10), (_) {
       _checkStatus();
     });
   }
@@ -235,6 +338,13 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
 
   void _shareTripLink() {
     final String shareUrl = 'http://localhost:5000/trip?id=${widget.requestId}';
+
+    // Auto-copy the link to the clipboard so the user can paste it anywhere
+    Clipboard.setData(ClipboardData(text: shareUrl));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('คัดลอกลิงก์ติดตามการเดินทางแล้ว')),
+    );
+
     Share.share(
       'ฉันกำลังเดินทางด้วย SafeSeat! คุณสามารถติดตามพิกัดสดและสถานะการเดินทางของฉันได้ที่นี่: $shareUrl',
       subject: 'ติดตามการเดินทางของฉัน (SafeSeat)',
@@ -305,7 +415,7 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
     final List<Marker> markers = [
       // Pickup Pin
       Marker(
-        point: widget.pickupLatLng,
+        point: _pickupLatLng,
         width: 80,
         height: 60,
         child: const Column(
@@ -320,7 +430,7 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
       ),
       // Dropoff Pin
       Marker(
-        point: widget.dropoffLatLng,
+        point: _dropoffLatLng,
         width: 80,
         height: 60,
         child: const Column(
@@ -377,7 +487,7 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
             child: FlutterMap(
               mapController: _mapController,
               options: MapOptions(
-                initialCenter: widget.pickupLatLng,
+                initialCenter: _pickupLatLng,
                 initialZoom: 14.5,
                 maxZoom: 18.0,
                 minZoom: 5.0,
