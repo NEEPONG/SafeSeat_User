@@ -91,7 +91,15 @@ class RequestDriverRepository {
       body: jsonEncode(review.toJson()),
     );
 
-    return response.statusCode == 201;
+    if (response.statusCode != 201) {
+      String message = 'Failed to submit review';
+      try {
+        final data = jsonDecode(response.body);
+        if (data['error'] != null) message = data['error'].toString();
+      } catch (_) {}
+      throw Exception(message);
+    }
+    return true;
   }
 
   Future<Map<String, dynamic>> checkReview(int requestId) async {

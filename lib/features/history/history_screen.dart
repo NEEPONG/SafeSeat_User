@@ -496,7 +496,11 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                       ),
                     ),
                   );
-                } else if (status == 'กำลังไปรับ' || status == 'ถึงจุดนัดหมาย' || status == 'กำลังเดินทาง') {
+                } else if (status == 'กำลังไปรับ' ||
+                    status == 'ถึงจุดนัดหมาย' ||
+                    status == 'ถึงจุดรับแล้ว' ||
+                    status == 'กำลังเดินทาง' ||
+                    status == 'ระหว่างเดินทาง') {
                   Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (context) => ActiveTripScreen(
