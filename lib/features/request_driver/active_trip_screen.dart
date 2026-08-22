@@ -413,64 +413,88 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
     final isTripCompleted = _currentStatus == 'เสร็จสิ้น';
 
     final List<Marker> markers = [
-      // Pickup Pin
+      // Pickup Pin (ผับ / บาร์ / ร้านอาหาร) - Compact badge
       Marker(
         point: _pickupLatLng,
-        width: 80,
-        height: 60,
-        child: const Column(
-          children: [
-            Icon(
-              Icons.location_on,
-              color: Colors.red,
-              size: 36,
+        width: 38,
+        height: 38,
+        child: Container(
+          decoration: BoxDecoration(
+            color: const Color(0xFFF97316), // ส้ม Amber/Orange สื่อถึง Nightlife/Pub & Restaurant
+            shape: BoxShape.circle,
+            border: Border.all(color: Colors.white, width: 2),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.25),
+                blurRadius: 6,
+                offset: const Offset(0, 3),
+              ),
+            ],
+          ),
+          child: const Center(
+            child: Icon(
+              Icons.sports_bar_rounded, // หรือ Icons.nightlife_rounded / Icons.local_bar_rounded
+              color: Colors.white,
+              size: 20,
             ),
-          ],
+          ),
         ),
       ),
-      // Dropoff Pin
+      // Dropoff Pin (บ้าน / ที่พัก) - Compact badge
       Marker(
         point: _dropoffLatLng,
-        width: 80,
-        height: 60,
-        child: const Column(
-          children: [
-            Icon(
-              Icons.location_on,
-              color: Color(0xFF10B981),
-              size: 36,
+        width: 38,
+        height: 38,
+        child: Container(
+          decoration: BoxDecoration(
+            color: const Color(0xFF10B981), // สีเขียว Emerald สื่อถึงจุดหมายปลายทางที่ปลอดภัย
+            shape: BoxShape.circle,
+            border: Border.all(color: Colors.white, width: 2),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.25),
+                blurRadius: 6,
+                offset: const Offset(0, 3),
+              ),
+            ],
+          ),
+          child: const Center(
+            child: Icon(
+              Icons.home_rounded,
+              color: Colors.white,
+              size: 20,
             ),
-          ],
+          ),
         ),
       ),
     ];
 
-    // Add Driver team pin if location exists
+    // Add Driver team pin if location exists (รถยนต์ของคนขับ)
     if (_driverLatLng != null) {
       markers.add(
         Marker(
           point: _driverLatLng!,
-          width: 60,
-          height: 60,
+          width: 40,
+          height: 40,
           child: Container(
             decoration: BoxDecoration(
               color: Colors.white,
               shape: BoxShape.circle,
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.2),
-                  blurRadius: 10,
-                  spreadRadius: 2,
-                  offset: const Offset(0, 4),
+                  color: Colors.black.withValues(alpha: 0.25),
+                  blurRadius: 8,
+                  spreadRadius: 1,
+                  offset: const Offset(0, 3),
                 ),
               ],
-              border: Border.all(color: statusUI['color'] as Color, width: 3),
+              border: Border.all(color: statusUI['color'] as Color, width: 2.5),
             ),
             child: Center(
               child: Icon(
-                Icons.navigation,
+                Icons.directions_car_filled_rounded,
                 color: statusUI['color'] as Color,
-                size: 24,
+                size: 22,
               ),
             ),
           ),
@@ -596,272 +620,293 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
               ),
             ),
 
-          // 4. Bottom Info Panel
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: Container(
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(30),
-                  topRight: Radius.circular(30),
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black12,
-                    blurRadius: 20,
-                    spreadRadius: 2,
-                    offset: Offset(0, -5),
+          // 4. Draggable Bottom Info Panel (สามารถเลื่อนขึ้น-ลงเพื่อดูแผนที่ได้เต็มจอ)
+          DraggableScrollableSheet(
+            initialChildSize: 0.38,
+            minChildSize: 0.15,
+            maxChildSize: 0.85,
+            snap: true,
+            snapSizes: const [0.15, 0.38, 0.85],
+            builder: (BuildContext context, ScrollController scrollController) {
+              return Container(
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(28),
+                    topRight: Radius.circular(28),
                   ),
-                ],
-              ),
-              child: SafeArea(
-                top: false,
-                child: Padding(
-                  padding: const EdgeInsets.all(24.0),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Status Section
-                      Row(
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black12,
+                      blurRadius: 20,
+                      spreadRadius: 2,
+                      offset: Offset(0, -5),
+                    ),
+                  ],
+                ),
+                child: SingleChildScrollView(
+                  controller: scrollController,
+                  physics: const ClampingScrollPhysics(),
+                  child: SafeArea(
+                    top: false,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(24.0, 12.0, 24.0, 24.0),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: statusUI['badgeColor'] as Color,
-                              shape: BoxShape.circle,
-                            ),
-                            child: Icon(
-                              statusUI['icon'] as IconData,
-                              color: statusUI['color'] as Color,
-                              size: 28,
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  statusUI['title'] as String,
-                                  style: TextStyle(
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.bold,
-                                    color: statusUI['color'] as Color,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  statusUI['desc'] as String,
-                                  style: const TextStyle(
-                                    fontSize: 14,
-                                    color: Color(0xFF64748B),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                      
-                      const Divider(height: 32),
-
-                      // Driver Profiles / Vehicle Card
-                      if (_leaderDriver != null) ...[
-                        const Text(
-                          'ทีมคู่หูคนขับของคุณ',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF475569),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFF8FAFC),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(color: const Color(0xFFF1F5F9)),
-                          ),
-                          child: Column(
-                            children: [
-                              // Leader Info Row
-                              Row(
-                                children: [
-                                  CircleAvatar(
-                                    backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.1),
-                                    child: const Icon(Icons.person, color: AppTheme.primaryColor),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          'คนขับหลัก: ${_leaderDriver!.firstname} ${_leaderDriver!.lastname}',
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 14,
-                                            color: Color(0xFF1E293B),
-                                          ),
-                                        ),
-                                        Text(
-                                          'ทะเบียนรถไล่ตาม: ${_leaderDriver!.licensePlate ?? 'ไม่ระบุ'}',
-                                          style: const TextStyle(
-                                            fontSize: 12,
-                                            color: Color(0xFF64748B),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  IconButton(
-                                    icon: const Icon(Icons.phone, color: Colors.green),
-                                    onPressed: () => _showCallDialog(
-                                      'คนขับหลัก',
-                                      '${_leaderDriver!.firstname} ${_leaderDriver!.lastname}',
-                                      _leaderDriver!.phoneNo,
-                                    ),
-                                  ),
-                                ],
+                          // Drag Handle bar indicator
+                          Center(
+                            child: Container(
+                              width: 44,
+                              height: 5,
+                              margin: const EdgeInsets.only(bottom: 16),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFCBD5E1),
+                                borderRadius: BorderRadius.circular(2.5),
                               ),
-                              
-                              if (_followerDriver != null) ...[
-                                const Padding(
-                                  padding: EdgeInsets.symmetric(vertical: 8.0),
-                                  child: Divider(color: Color(0xFFE2E8F0)),
+                            ),
+                          ),
+
+                          // Status Section
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: statusUI['badgeColor'] as Color,
+                                  shape: BoxShape.circle,
                                 ),
-                                // Follower Info Row
-                                Row(
+                                child: Icon(
+                                  statusUI['icon'] as IconData,
+                                  color: statusUI['color'] as Color,
+                                  size: 28,
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    CircleAvatar(
-                                      backgroundColor: Colors.blueGrey.withValues(alpha: 0.1),
-                                      child: const Icon(Icons.motorcycle, color: Colors.blueGrey),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            'คนขับรถผู้ช่วย: ${_followerDriver!.firstname} ${_followerDriver!.lastname}',
-                                            style: const TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 14,
-                                              color: Color(0xFF1E293B),
-                                            ),
-                                          ),
-                                          const Text(
-                                            'ขับรถผู้ช่วยติดตามคุณ',
-                                            style: TextStyle(
-                                              fontSize: 12,
-                                              color: Color(0xFF64748B),
-                                            ),
-                                          ),
-                                        ],
+                                    Text(
+                                      statusUI['title'] as String,
+                                      style: TextStyle(
+                                        fontSize: 20,
+                                        fontWeight: FontWeight.bold,
+                                        color: statusUI['color'] as Color,
                                       ),
                                     ),
-                                    IconButton(
-                                      icon: const Icon(Icons.phone, color: Colors.green),
-                                      onPressed: () => _showCallDialog(
-                                        'คนขับผู้ช่วย',
-                                        '${_followerDriver!.firstname} ${_followerDriver!.lastname}',
-                                        _followerDriver!.phoneNo,
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      statusUI['desc'] as String,
+                                      style: const TextStyle(
+                                        fontSize: 14,
+                                        color: Color(0xFF64748B),
                                       ),
                                     ),
                                   ],
                                 ),
-                              ],
+                              ),
                             ],
                           ),
-                        ),
-                        const SizedBox(height: 20),
-                      ],
+                          
+                          const Divider(height: 32),
 
-                      // Fare summary card
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'ยานพาหนะที่จะให้ขับ',
-                                style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                          // Driver Profiles / Vehicle Card
+                          if (_leaderDriver != null) ...[
+                            const Text(
+                              'ทีมคู่หูคนขับของคุณ',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF475569),
                               ),
-                              const SizedBox(height: 2),
-                              Text(
-                                widget.carDetails,
-                                style: const TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFF1E293B),
-                                ),
+                            ),
+                            const SizedBox(height: 12),
+                            Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF8FAFC),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(color: const Color(0xFFF1F5F9)),
+                              ),
+                              child: Column(
+                                children: [
+                                  // Leader Info Row
+                                  Row(
+                                    children: [
+                                      CircleAvatar(
+                                        backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.1),
+                                        child: const Icon(Icons.person, color: AppTheme.primaryColor),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              'คนขับหลัก: ${_leaderDriver!.firstname} ${_leaderDriver!.lastname}',
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 14,
+                                                color: Color(0xFF1E293B),
+                                              ),
+                                            ),
+                                            Text(
+                                              'ทะเบียนรถไล่ตาม: ${_leaderDriver!.licensePlate ?? 'ไม่ระบุ'}',
+                                              style: const TextStyle(
+                                                fontSize: 12,
+                                                color: Color(0xFF64748B),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      IconButton(
+                                        icon: const Icon(Icons.phone, color: Colors.green),
+                                        onPressed: () => _showCallDialog(
+                                          'คนขับหลัก',
+                                          '${_leaderDriver!.firstname} ${_leaderDriver!.lastname}',
+                                          _leaderDriver!.phoneNo,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  
+                                  if (_followerDriver != null) ...[
+                                    const Padding(
+                                      padding: EdgeInsets.symmetric(vertical: 8.0),
+                                      child: Divider(color: Color(0xFFE2E8F0)),
+                                    ),
+                                    // Follower Info Row
+                                    Row(
+                                      children: [
+                                        CircleAvatar(
+                                          backgroundColor: Colors.blueGrey.withValues(alpha: 0.1),
+                                          child: const Icon(Icons.motorcycle, color: Colors.blueGrey),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                'คนขับรถผู้ช่วย: ${_followerDriver!.firstname} ${_followerDriver!.lastname}',
+                                                style: const TextStyle(
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 14,
+                                                  color: Color(0xFF1E293B),
+                                                ),
+                                              ),
+                                              const Text(
+                                                'ขับรถผู้ช่วยติดตามคุณ',
+                                                style: TextStyle(
+                                                  fontSize: 12,
+                                                  color: Color(0xFF64748B),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        IconButton(
+                                          icon: const Icon(Icons.phone, color: Colors.green),
+                                          onPressed: () => _showCallDialog(
+                                            'คนขับผู้ช่วย',
+                                            '${_followerDriver!.firstname} ${_followerDriver!.lastname}',
+                                            _followerDriver!.phoneNo,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 20),
+                          ],
+
+                          // Fare summary card
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'ยานพาหนะที่จะให้ขับ',
+                                    style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    widget.carDetails,
+                                    style: const TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFF1E293B),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  const Text(
+                                    'ค่าบริการสุทธิ',
+                                    style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    '฿${_tripPrice.toStringAsFixed(0)}',
+                                    style: const TextStyle(
+                                      fontSize: 22,
+                                      fontWeight: FontWeight.bold,
+                                      color: AppTheme.primaryColor,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ],
                           ),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              const Text(
-                                'ค่าบริการสุทธิ',
-                                style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+
+                          const SizedBox(height: 24),
+
+                          // Actions Button
+                          SizedBox(
+                            width: double.infinity,
+                            height: 56,
+                            child: ElevatedButton(
+                              onPressed: isTripCompleted
+                                  ? () {
+                                      Navigator.of(context).pop(); // Pops this screen back to HomeScreen
+                                    }
+                                  : null,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: isTripCompleted ? AppTheme.primaryColor : const Color(0xFFE2E8F0),
+                                foregroundColor: Colors.white,
+                                disabledBackgroundColor: const Color(0xFFE2E8F0),
+                                disabledForegroundColor: const Color(0xFF94A3B8),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(28),
+                                ),
+                                elevation: isTripCompleted ? 4 : 0,
                               ),
-                              const SizedBox(height: 2),
-                              Text(
-                                '฿${_tripPrice.toStringAsFixed(0)}',
+                              child: Text(
+                                isTripCompleted ? 'กลับสู่หน้าหลัก' : 'กำลังนำทางโดยคนขับรถมืออาชีพ...',
                                 style: const TextStyle(
-                                  fontSize: 22,
+                                  fontSize: 16,
                                   fontWeight: FontWeight.bold,
-                                  color: AppTheme.primaryColor,
                                 ),
                               ),
-                            ],
+                            ),
                           ),
                         ],
                       ),
-
-                      const SizedBox(height: 24),
-
-                      // Actions Button
-                      SizedBox(
-                        width: double.infinity,
-                        height: 56,
-                        child: ElevatedButton(
-                          onPressed: isTripCompleted
-                              ? () {
-                                  Navigator.of(context).pop(); // Pops this screen back to HomeScreen
-                                }
-                              : null,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: isTripCompleted ? AppTheme.primaryColor : const Color(0xFFE2E8F0),
-                            foregroundColor: Colors.white,
-                            disabledBackgroundColor: const Color(0xFFE2E8F0),
-                            disabledForegroundColor: const Color(0xFF94A3B8),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(28),
-                            ),
-                            elevation: isTripCompleted ? 4 : 0,
-                          ),
-                          child: Text(
-                            isTripCompleted ? 'กลับสู่หน้าหลัก' : 'กำลังนำทางโดยคนขับรถมืออาชีพ...',
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
                 ),
-              ),
-            ),
+              );
+            },
           ),
         ],
       ),

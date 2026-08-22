@@ -30,6 +30,7 @@ class _RequestDriverDetailsScreenState
   double _estimatedPrice = 300.0;
   double _distanceInKm = 0.0;
   bool _isSubmitting = false;
+  bool _isLoadingRoute = true;
 
   @override
   void initState() {
@@ -44,7 +45,18 @@ class _RequestDriverDetailsScreenState
     final pickup = reqState.pickupLatLng;
     final dropoff = reqState.dropoffLatLng;
 
-    if (pickup == null || dropoff == null) return;
+    if (pickup == null || dropoff == null) {
+      if (mounted) {
+        setState(() {
+          _isLoadingRoute = false;
+        });
+      }
+      return;
+    }
+
+    setState(() {
+      _isLoadingRoute = true;
+    });
 
     final routeDetails = await RouteService.getRouteDetails(pickup, dropoff);
 
@@ -54,12 +66,15 @@ class _RequestDriverDetailsScreenState
       List<LatLng> points = [pickup, dropoff];
 
       if (routeDetails != null) {
-        points = routeDetails.points.isNotEmpty ? routeDetails.points : [pickup, dropoff];
+        points = routeDetails.points.isNotEmpty
+            ? routeDetails.points
+            : [pickup, dropoff];
         distanceKm = routeDetails.distance / 1000.0;
         calculatedPrice = 300.0 + (distanceKm * 10.0);
       } else {
         // Fallback using straight-line distance if API fails
-        final distanceMeters = const Distance().as(LengthUnit.Meter, pickup, dropoff);
+        final distanceMeters =
+            const Distance().as(LengthUnit.Meter, pickup, dropoff);
         distanceKm = distanceMeters / 1000.0;
         calculatedPrice = 300.0 + (distanceKm * 10.0);
       }
@@ -68,19 +83,51 @@ class _RequestDriverDetailsScreenState
         _routePoints = points;
         _estimatedPrice = calculatedPrice;
         _distanceInKm = distanceKm;
+        _isLoadingRoute = false;
       });
 
-      // Fit map bounds to show both pins and the route, ensuring non-zero area
-      if (pickup.latitude != dropoff.latitude || pickup.longitude != dropoff.longitude) {
+      _fitMapBounds();
+    }
+  }
+
+  void _fitMapBounds() {
+    final reqState = ref.read(requestDriverControllerProvider);
+    final pickup = reqState.pickupLatLng;
+    final dropoff = reqState.dropoffLatLng;
+
+    if (pickup != null && dropoff != null) {
+      if (pickup.latitude != dropoff.latitude ||
+          pickup.longitude != dropoff.longitude) {
         _mapController.fitCamera(
           CameraFit.bounds(
             bounds: LatLngBounds(pickup, dropoff),
-            padding: const EdgeInsets.symmetric(horizontal: 50.0, vertical: 50.0),
+            padding: const EdgeInsets.only(
+              left: 50.0,
+              right: 50.0,
+              top: 80.0,
+              bottom: 280.0,
+            ),
           ),
         );
       } else {
         _mapController.move(pickup, 15.0);
       }
+    } else if (pickup != null) {
+      _mapController.move(pickup, 15.0);
+    }
+  }
+
+  void _zoomIn() {
+    final currentZoom = _mapController.camera.zoom;
+    if (currentZoom < 18.0) {
+      _mapController.move(_mapController.camera.center, currentZoom + 1);
+    }
+  }
+
+  void _zoomOut() {
+    final currentZoom = _mapController.camera.zoom;
+    if (currentZoom > 5.0) {
+      _mapController.move(_mapController.camera.center, currentZoom - 1);
     }
   }
 
@@ -138,7 +185,8 @@ class _RequestDriverDetailsScreenState
                           _selectedCar?.userCarId == car.userCarId;
                       return ListTile(
                         leading: CircleAvatar(
-                          backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.1),
+                          backgroundColor:
+                              AppTheme.primaryColor.withValues(alpha: 0.1),
                           child: Icon(
                             Icons.directions_car,
                             color: isSelected
@@ -152,7 +200,7 @@ class _RequestDriverDetailsScreenState
                         ),
                         subtitle: Text('${car.carColor} • ${car.carPlate}'),
                         trailing: isSelected
-                            ? Icon(
+                            ? const Icon(
                                 Icons.check_circle,
                                 color: AppTheme.primaryColor,
                               )
@@ -210,7 +258,11 @@ class _RequestDriverDetailsScreenState
                 _paymentMethod = 'เงินสด';
               });
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('เปลี่ยนช่องทางการชำระเงินเป็น เงินสด เรียบร้อยแล้ว')),
+                const SnackBar(
+                  content: Text(
+                    'เปลี่ยนช่องทางการชำระเงินเป็น เงินสด เรียบร้อยแล้ว',
+                  ),
+                ),
               );
             },
             style: ElevatedButton.styleFrom(
@@ -258,201 +310,377 @@ class _RequestDriverDetailsScreenState
       backgroundColor: const Color(0xFFF8FAFC),
       body: Stack(
         children: [
-          // Scrollable content
-          SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          // 1. Full Interactive Background Map
+          Positioned.fill(
+            child: FlutterMap(
+              mapController: _mapController,
+              options: MapOptions(
+                initialCenter: pickupLatLng,
+                initialZoom: 15.0,
+                maxZoom: 18.5,
+                minZoom: 5.0,
+                interactionOptions: const InteractionOptions(
+                  flags: InteractiveFlag.all,
+                ),
+              ),
               children: [
-                // 1. Top Mini Map
-                SizedBox(
-                  height: 280,
-                  child: Stack(
-                    children: [
-                      FlutterMap(
-                        mapController: _mapController,
-                        options: MapOptions(
-                          initialCenter: pickupLatLng,
-                          initialZoom: 15.0,
-                          interactionOptions: const InteractionOptions(
-                            flags: InteractiveFlag.none,
-                          ),
-                        ),
-                        children: [
-                          TileLayer(
-                            urlTemplate:
-                                'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                            userAgentPackageName: 'com.safeseat.mini',
-                          ),
-                          if (_routePoints.isNotEmpty)
-                            PolylineLayer(
-                              polylines: [
-                                Polyline(
-                                  points: _routePoints,
-                                  color: AppTheme.primaryColor,
-                                  strokeWidth: 4.0,
-                                ),
-                              ],
-                            ),
-                          MarkerLayer(
-                            markers: [
-                              if (reqState.pickupLatLng != null)
-                                Marker(
-                                  point: reqState.pickupLatLng!,
-                                  width: 100,
-                                  height: 80,
-                                  child: Column(
-                                    children: [
-                                      // Custom label bubble
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 10,
-                                          vertical: 5,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: AppTheme.primaryColor,
-                                          borderRadius: BorderRadius.circular(10),
-                                        ),
-                                        child: const Text(
-                                          'รับที่นี่',
-                                          style: TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                      ),
-                                      const Icon(
-                                        Icons.location_on,
-                                        color: Colors.red,
-                                        size: 32,
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              if (reqState.dropoffLatLng != null)
-                                Marker(
-                                  point: reqState.dropoffLatLng!,
-                                  width: 100,
-                                  height: 80,
-                                  child: Column(
-                                    children: [
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 10,
-                                          vertical: 5,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xFF0F172A),
-                                          borderRadius: BorderRadius.circular(10),
-                                        ),
-                                        child: const Text(
-                                          'ส่งที่นี่',
-                                          style: TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                      ),
-                                      const Icon(
-                                        Icons.location_on,
-                                        color: Color(0xFF10B981),
-                                        size: 32,
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ],
+                TileLayer(
+                  urlTemplate:
+                      'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                  userAgentPackageName: 'com.safeseat.mini',
+                ),
+                if (_routePoints.isNotEmpty)
+                  PolylineLayer(
+                    polylines: [
+                      Polyline(
+                        points: _routePoints,
+                        color: AppTheme.primaryColor,
+                        strokeWidth: 4.5,
                       ),
-                      // Floating Back button
-                      SafeArea(
-                        child: Padding(
-                          padding: const EdgeInsets.all(16.0),
-                          child: GestureDetector(
-                            onTap: () => Navigator.of(context).pop(),
-                            child: Container(
-                              padding: const EdgeInsets.all(10),
-                              decoration: const BoxDecoration(
-                                color: Colors.white,
-                                shape: BoxShape.circle,
-                                boxShadow: [
+                    ],
+                  ),
+                MarkerLayer(
+                  markers: [
+                    if (reqState.pickupLatLng != null)
+                      Marker(
+                        point: reqState.pickupLatLng!,
+                        width: 100,
+                        height: 80,
+                        child: Column(
+                          children: [
+                            // Custom label bubble
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 5,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppTheme.primaryColor,
+                                borderRadius: BorderRadius.circular(10),
+                                boxShadow: const [
                                   BoxShadow(
-                                    color: Colors.black12,
-                                    blurRadius: 8,
+                                    color: Colors.black26,
+                                    blurRadius: 4,
                                     offset: Offset(0, 2),
                                   ),
                                 ],
                               ),
-                              child: const Icon(
-                                Icons.arrow_back,
-                                color: Color(0xFF1E293B),
-                                size: 22,
+                              child: const Text(
+                                'รับที่นี่',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
                             ),
-                          ),
+                            const Icon(
+                              Icons.location_on,
+                              color: Colors.red,
+                              size: 32,
+                            ),
+                          ],
                         ),
+                      ),
+                    if (reqState.dropoffLatLng != null)
+                      Marker(
+                        point: reqState.dropoffLatLng!,
+                        width: 100,
+                        height: 80,
+                        child: Column(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 5,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF0F172A),
+                                borderRadius: BorderRadius.circular(10),
+                                boxShadow: const [
+                                  BoxShadow(
+                                    color: Colors.black26,
+                                    blurRadius: 4,
+                                    offset: Offset(0, 2),
+                                  ),
+                                ],
+                              ),
+                              child: const Text(
+                                'ส่งที่นี่',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                            const Icon(
+                              Icons.location_on,
+                              color: Color(0xFF10B981),
+                              size: 32,
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+
+          // Route Loading Progress Bar
+          if (_isLoadingRoute)
+            const Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: LinearProgressIndicator(
+                backgroundColor: Colors.transparent,
+                valueColor:
+                    AlwaysStoppedAnimation<Color>(AppTheme.primaryColor),
+              ),
+            ),
+
+          // 2. Floating Top-Left Back Button
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: GestureDetector(
+                onTap: () => Navigator.of(context).pop(),
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.15),
+                        blurRadius: 10,
+                        offset: const Offset(0, 3),
                       ),
                     ],
                   ),
+                  child: const Icon(
+                    Icons.arrow_back,
+                    color: Color(0xFF1E293B),
+                    size: 22,
+                  ),
                 ),
+              ),
+            ),
+          ),
 
-                // 2. Selection Form Content
-                Container(
-                  padding: const EdgeInsets.all(24.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Vehicle Selection Section
-                      const Text(
-                        'กรุณาเลือกยานพาหนะของท่าน',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF1E293B),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
+          // 3. Floating Map Action Controls (Recenter & Zoom buttons)
+          Positioned(
+            right: 16,
+            top: MediaQuery.of(context).padding.top + 16,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Recenter / Fit bounds button
+                FloatingActionButton.small(
+                  heroTag: 'recenter_btn_details',
+                  backgroundColor: Colors.white,
+                  foregroundColor: const Color(0xFF1E293B),
+                  elevation: 4,
+                  onPressed: _fitMapBounds,
+                  shape: const CircleBorder(),
+                  tooltip: 'ปรับมุมมองแผนที่',
+                  child: const Icon(Icons.my_location, size: 20),
+                ),
+                const SizedBox(height: 10),
+                // Zoom in button
+                FloatingActionButton.small(
+                  heroTag: 'zoom_in_btn_details',
+                  backgroundColor: Colors.white,
+                  foregroundColor: const Color(0xFF1E293B),
+                  elevation: 4,
+                  onPressed: _zoomIn,
+                  shape: const CircleBorder(),
+                  tooltip: 'ซูมเข้า',
+                  child: const Icon(Icons.add, size: 22),
+                ),
+                const SizedBox(height: 10),
+                // Zoom out button
+                FloatingActionButton.small(
+                  heroTag: 'zoom_out_btn_details',
+                  backgroundColor: Colors.white,
+                  foregroundColor: const Color(0xFF1E293B),
+                  elevation: 4,
+                  onPressed: _zoomOut,
+                  shape: const CircleBorder(),
+                  tooltip: 'ซูมออก',
+                  child: const Icon(Icons.remove, size: 22),
+                ),
+              ],
+            ),
+          ),
 
-                      carListAsync.when(
-                        loading: () => Container(
-                          height: 72,
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: const Color(0xFFE2E8F0)),
-                          ),
-                          child: const Center(
-                            child: CircularProgressIndicator(),
-                          ),
-                        ),
-                        error: (error, stack) => Container(
-                          height: 72,
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: const Color(0xFFE2E8F0)),
-                          ),
-                          child: const Center(
-                            child: Text(
-                              'ไม่สามารถโหลดข้อมูลยานพาหนะได้',
-                              style: TextStyle(color: Colors.red),
+          // 4. Draggable Scrollable Sheet (แถบรายละเอียดเลื่อนขึ้น-ลงได้)
+          DraggableScrollableSheet(
+            initialChildSize: 0.52,
+            minChildSize: 0.20,
+            maxChildSize: 0.90,
+            snap: true,
+            snapSizes: const [0.20, 0.52, 0.90],
+            builder: (BuildContext context, ScrollController scrollController) {
+              return Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(28),
+                    topRight: Radius.circular(28),
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.12),
+                      blurRadius: 20,
+                      spreadRadius: 2,
+                      offset: const Offset(0, -4),
+                    ),
+                  ],
+                ),
+                child: SingleChildScrollView(
+                  controller: scrollController,
+                  physics: const ClampingScrollPhysics(),
+                  child: SafeArea(
+                    top: false,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Grab Handle Bar
+                          Center(
+                            child: Container(
+                              width: 44,
+                              height: 5,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFCBD5E1),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
                             ),
                           ),
-                        ),
-                        data: (cars) {
-                          final displayedText = _selectedCar != null
-                              ? '${_selectedCar!.carBrand} ${_selectedCar!.carModel} (${_selectedCar!.carPlate})'
-                              : 'กรุณาเลือกยานพาหนะ';
-                          final displayedType =
-                              _selectedCar?.carTypeName ?? 'ไม่มีประเภทระบุ';
+                          const SizedBox(height: 16),
 
-                          return InkWell(
-                            onTap: () => _showCarSelectionSheet(cars),
-                            child: Container(
-                              padding: const EdgeInsets.all(16),
+                          // Route Summary Card (จุดรับ - จุดส่ง & ระยะทาง)
+                          Container(
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF8FAFC),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: const Color(0xFFE2E8F0),
+                              ),
+                            ),
+                            child: Column(
+                              children: [
+                                Row(
+                                  children: [
+                                    Container(
+                                      width: 10,
+                                      height: 10,
+                                      decoration: const BoxDecoration(
+                                        color: Colors.red,
+                                        shape: BoxShape.circle,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Text(
+                                        reqState.pickupAddress ??
+                                            'จุดรับผู้โดยสาร',
+                                        style: const TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w600,
+                                          color: Color(0xFF334155),
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    if (_distanceInKm > 0)
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 3,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: AppTheme.primaryColor
+                                              .withValues(alpha: 0.1),
+                                          borderRadius:
+                                              BorderRadius.circular(12),
+                                        ),
+                                        child: Text(
+                                          '${_distanceInKm.toStringAsFixed(1)} กม.',
+                                          style: const TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.bold,
+                                            color: AppTheme.primaryColor,
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                                const Padding(
+                                  padding: EdgeInsets.only(left: 4.0),
+                                  child: Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: SizedBox(
+                                      height: 12,
+                                      child: VerticalDivider(
+                                        thickness: 1.5,
+                                        color: Color(0xFFCBD5E1),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                Row(
+                                  children: [
+                                    Container(
+                                      width: 10,
+                                      height: 10,
+                                      decoration: const BoxDecoration(
+                                        color: Color(0xFF10B981),
+                                        shape: BoxShape.circle,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Text(
+                                        reqState.dropoffAddress ??
+                                            'จุดส่งปลายทาง',
+                                        style: const TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w600,
+                                          color: Color(0xFF334155),
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          const SizedBox(height: 20),
+
+                          // Vehicle Selection Section
+                          const Text(
+                            'กรุณาเลือกยานพาหนะของท่าน',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF1E293B),
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+
+                          carListAsync.when(
+                            loading: () => Container(
+                              height: 68,
                               decoration: BoxDecoration(
                                 color: Colors.white,
                                 borderRadius: BorderRadius.circular(16),
@@ -460,93 +688,140 @@ class _RequestDriverDetailsScreenState
                                   color: const Color(0xFFE2E8F0),
                                 ),
                               ),
-                              child: Row(
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.all(10),
-                                    decoration: BoxDecoration(
-                                      color: AppTheme.primaryColor.withValues(alpha: 0.1),
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: Icon(
-                                      Icons.directions_car,
-                                      color: AppTheme.primaryColor,
-                                      size: 24,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 16),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          displayedText,
-                                          style: const TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.bold,
-                                            color: Color(0xFF1E293B),
-                                          ),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          displayedType,
-                                          style: const TextStyle(
-                                            fontSize: 12,
-                                            color: Color(0xFF64748B),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  const Icon(
-                                    Icons.keyboard_arrow_down,
-                                    color: Color(0xFF64748B),
-                                  ),
-                                ],
+                              child: const Center(
+                                child: CircularProgressIndicator(),
                               ),
                             ),
-                          );
-                        },
-                      ),
-
-                      const SizedBox(height: 24),
-
-                      // Lady Mode Section
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: const Color(0xFFE2E8F0)),
-                        ),
-                        child: Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(10),
+                            error: (error, stack) => Container(
+                              height: 68,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                              ),
                               decoration: BoxDecoration(
-                                color: const Color(0xFFFDF2F8), // Light pink
-                                borderRadius: BorderRadius.circular(12),
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(
+                                  color: const Color(0xFFE2E8F0),
+                                ),
                               ),
-                              child: const Icon(
-                                Icons.female,
-                                color: Color(0xFFEC4899), // Pink
-                                size: 24,
+                              child: const Center(
+                                child: Text(
+                                  'ไม่สามารถโหลดข้อมูลยานพาหนะได้',
+                                  style: TextStyle(color: Colors.red),
+                                ),
                               ),
                             ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
+                            data: (cars) {
+                              final displayedText = _selectedCar != null
+                                  ? '${_selectedCar!.carBrand} ${_selectedCar!.carModel} (${_selectedCar!.carPlate})'
+                                  : 'กรุณาเลือกยานพาหนะ';
+                              final displayedType =
+                                  _selectedCar?.carTypeName ??
+                                      'ไม่มีประเภทระบุ';
+
+                              return InkWell(
+                                onTap: () => _showCarSelectionSheet(cars),
+                                borderRadius: BorderRadius.circular(16),
+                                child: Container(
+                                  padding: const EdgeInsets.all(14),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(
+                                      color: const Color(0xFFE2E8F0),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.all(10),
+                                        decoration: BoxDecoration(
+                                          color: AppTheme.primaryColor
+                                              .withValues(alpha: 0.1),
+                                          borderRadius:
+                                              BorderRadius.circular(12),
+                                        ),
+                                        child: const Icon(
+                                          Icons.directions_car,
+                                          color: AppTheme.primaryColor,
+                                          size: 22,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 14),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              displayedText,
+                                              style: const TextStyle(
+                                                fontSize: 15,
+                                                fontWeight: FontWeight.bold,
+                                                color: Color(0xFF1E293B),
+                                              ),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                            const SizedBox(height: 2),
+                                            Text(
+                                              displayedType,
+                                              style: const TextStyle(
+                                                fontSize: 12,
+                                                color: Color(0xFF64748B),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      const Icon(
+                                        Icons.keyboard_arrow_down,
+                                        color: Color(0xFF64748B),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+
+                          const SizedBox(height: 18),
+
+                          // Lady Mode Section
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 10,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: const Color(0xFFE2E8F0),
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFFDF2F8),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: const Icon(
+                                    Icons.female,
+                                    color: Color(0xFFEC4899),
+                                    size: 22,
+                                  ),
+                                ),
+                                const SizedBox(width: 14),
+                                Expanded(
+                                  child: Row(
                                     children: [
                                       const Text(
                                         'เลดี้โหมด',
                                         style: TextStyle(
-                                          fontSize: 16,
+                                          fontSize: 15,
                                           fontWeight: FontWeight.bold,
                                           color: Color(0xFF1E293B),
                                         ),
@@ -558,12 +833,9 @@ class _RequestDriverDetailsScreenState
                                           vertical: 2,
                                         ),
                                         decoration: BoxDecoration(
-                                          color: const Color(
-                                            0xFFECFDF5,
-                                          ), // Light green
-                                          borderRadius: BorderRadius.circular(
-                                            8,
-                                          ),
+                                          color: const Color(0xFFECFDF5),
+                                          borderRadius:
+                                              BorderRadius.circular(8),
                                         ),
                                         child: const Text(
                                           'FREE',
@@ -576,302 +848,346 @@ class _RequestDriverDetailsScreenState
                                       ),
                                     ],
                                   ),
+                                ),
+                                Switch.adaptive(
+                                  value: _ladyMode,
+                                  activeThumbColor: const Color(0xFFEC4899),
+                                  activeTrackColor: const Color(0xFFEC4899)
+                                      .withValues(alpha: 0.3),
+                                  onChanged: (val) {
+                                    setState(() {
+                                      _ladyMode = val;
+                                    });
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          const SizedBox(height: 18),
+
+                          // Remarks Section
+                          const Text(
+                            'หมายเหตุ',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF1E293B),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          TextField(
+                            controller: _remarksController,
+                            maxLines: 2,
+                            decoration: InputDecoration(
+                              hintText:
+                                  'ระบุหมายเหตุ เช่น จุดสังเกต หรือสิ่งที่ต้องการแจ้งคนขับ',
+                              hintStyle: const TextStyle(
+                                color: Color(0xFF94A3B8),
+                                fontSize: 13,
+                              ),
+                              fillColor: Colors.white,
+                              filled: true,
+                              contentPadding: const EdgeInsets.all(14),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(16),
+                                borderSide: const BorderSide(
+                                  color: Color(0xFFE2E8F0),
+                                ),
+                              ),
+                              focusedBorder: const OutlineInputBorder(
+                                borderRadius: BorderRadius.all(Radius.circular(16)),
+                                borderSide: BorderSide(
+                                  color: AppTheme.primaryColor,
+                                  width: 1.5,
+                                ),
+                              ),
+                            ),
+                          ),
+
+                          const SizedBox(height: 18),
+
+                          // Payment Method Section
+                          const Text(
+                            'การชำระเงิน',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF1E293B),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          InkWell(
+                            onTap: () async {
+                              final selected =
+                                  await Navigator.of(context).push<String>(
+                                MaterialPageRoute(
+                                  builder: (context) => PaymentMethodScreen(
+                                    initialMethod: _paymentMethod,
+                                  ),
+                                ),
+                              );
+                              if (selected != null) {
+                                setState(() {
+                                  _paymentMethod = selected;
+                                });
+                              }
+                            },
+                            borderRadius: BorderRadius.circular(16),
+                            child: Container(
+                              padding: const EdgeInsets.all(14),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(
+                                  color: const Color(0xFFE2E8F0),
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    _paymentMethod.startsWith('เงินสด')
+                                        ? Icons.payments
+                                        : Icons.account_balance_wallet,
+                                    color: const Color(0xFF64748B),
+                                    size: 22,
+                                  ),
+                                  const SizedBox(width: 14),
+                                  Expanded(
+                                    child: Text(
+                                      _paymentMethod,
+                                      style: const TextStyle(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w500,
+                                        color: Color(0xFF334155),
+                                      ),
+                                    ),
+                                  ),
+                                  const Icon(
+                                    Icons.chevron_right,
+                                    color: Color(0xFF64748B),
+                                  ),
                                 ],
                               ),
                             ),
-                            Switch.adaptive(
-                              value: _ladyMode,
-                              activeThumbColor: const Color(0xFFEC4899),
-                              onChanged: (val) {
-                                setState(() {
-                                  _ladyMode = val;
-                                });
-                              },
-                            ),
-                          ],
-                        ),
-                      ),
-
-                      const SizedBox(height: 24),
-
-                      // Remarks Section
-                      const Text(
-                        'หมายเหตุ',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF1E293B),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: _remarksController,
-                        maxLines: 3,
-                        decoration: InputDecoration(
-                          hintText:
-                              'ระบุหมายเหตุเช่น ที่ต้องการให้ผู้บริการทราบ',
-                          hintStyle: const TextStyle(
-                            color: Color(0xFF94A3B8),
-                            fontSize: 14,
                           ),
-                          fillColor: Colors.white,
-                          filled: true,
-                          contentPadding: const EdgeInsets.all(16),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(16),
-                            borderSide: const BorderSide(
-                              color: Color(0xFFE2E8F0),
-                            ),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(16),
-                            borderSide: BorderSide(
-                              color: AppTheme.primaryColor,
-                              width: 1.5,
-                            ),
-                          ),
-                        ),
-                      ),
 
-                      const SizedBox(height: 24),
+                          const SizedBox(height: 24),
 
-                      // Payment Method Section
-                      const Text(
-                        'การชำระเงิน',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF1E293B),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      InkWell(
-                        onTap: () async {
-                          final selected = await Navigator.of(context).push<String>(
-                            MaterialPageRoute(
-                              builder: (context) => PaymentMethodScreen(initialMethod: _paymentMethod),
-                            ),
-                          );
-                          if (selected != null) {
-                            setState(() {
-                              _paymentMethod = selected;
-                            });
-                          }
-                        },
-                        borderRadius: BorderRadius.circular(16),
-                        child: Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: const Color(0xFFE2E8F0)),
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(
-                                _paymentMethod.startsWith('เงินสด')
-                                    ? Icons.payments
-                                    : Icons.account_balance_wallet,
-                                color: const Color(0xFF64748B),
-                                size: 24,
+                          // Estimated Price & Call Driver Action Card
+                          Container(
+                            padding: const EdgeInsets.all(18),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF8FAFC),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: const Color(0xFFE2E8F0),
                               ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: Text(
-                                  _paymentMethod,
-                                  style: const TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w500,
-                                    color: Color(0xFF334155),
+                            ),
+                            child: Column(
+                              children: [
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        const Text(
+                                          'ยอดรวมโดยประมาณ',
+                                          style: TextStyle(
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.bold,
+                                            color: Color(0xFF64748B),
+                                          ),
+                                        ),
+                                        if (_distanceInKm > 0)
+                                          Text(
+                                            'ระยะทาง ${_distanceInKm.toStringAsFixed(1)} กม.',
+                                            style: const TextStyle(
+                                              fontSize: 12,
+                                              color: Color(0xFF94A3B8),
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                    Text(
+                                      '฿${_estimatedPrice.toStringAsFixed(0)}',
+                                      style: const TextStyle(
+                                        fontSize: 26,
+                                        fontWeight: FontWeight.bold,
+                                        color: AppTheme.primaryColor,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 16),
+
+                                // Call Driver Action Button
+                                SizedBox(
+                                  width: double.infinity,
+                                  height: 54,
+                                  child: ElevatedButton.icon(
+                                    onPressed: _selectedCar == null ||
+                                            _isSubmitting
+                                        ? null
+                                        : () async {
+                                            final user =
+                                                ref.read(userProvider);
+                                            final balance =
+                                                user?.walletBalance ?? 0.0;
+                                            final isWallet = !_paymentMethod
+                                                .startsWith('เงินสด');
+
+                                            if (isWallet &&
+                                                balance < _estimatedPrice) {
+                                              _showInsufficientBalanceDialog(
+                                                balance,
+                                              );
+                                              return;
+                                            }
+
+                                            if (reqState.pickupLatLng == null ||
+                                                reqState.dropoffLatLng == null) {
+                                              ScaffoldMessenger.of(context)
+                                                  .showSnackBar(
+                                                const SnackBar(
+                                                  content: Text(
+                                                    'กรุณาระบุจุดรับและจุดส่งให้เรียบร้อยก่อนเรียกรถ',
+                                                  ),
+                                                ),
+                                              );
+                                              return;
+                                            }
+
+                                            setState(() {
+                                              _isSubmitting = true;
+                                            });
+
+                                            try {
+                                              final requestId = await ref
+                                                  .read(
+                                                    requestDriverControllerProvider
+                                                        .notifier,
+                                                  )
+                                                  .createRequest(
+                                                    dropoffLatitude: reqState
+                                                        .dropoffLatLng!
+                                                        .latitude,
+                                                    dropoffLongitude: reqState
+                                                        .dropoffLatLng!
+                                                        .longitude,
+                                                    isLadyMode: _ladyMode,
+                                                    note: _remarksController
+                                                        .text
+                                                        .trim(),
+                                                    paymentMethod:
+                                                        _paymentMethod,
+                                                    pickupLatitude: reqState
+                                                        .pickupLatLng!.latitude,
+                                                    pickupLongitude: reqState
+                                                        .pickupLatLng!
+                                                        .longitude,
+                                                    reqDistance: _distanceInKm,
+                                                    requestFee: _estimatedPrice,
+                                                    userId: phoneNo,
+                                                    userCarId: _selectedCar!
+                                                        .userCarId,
+                                                  );
+
+                                              if (requestId != null) {
+                                                if (context.mounted) {
+                                                  Navigator.of(context).push(
+                                                    MaterialPageRoute(
+                                                      builder: (context) =>
+                                                          WaitingDriverScreen(
+                                                        requestId: requestId,
+                                                        pickupAddress: reqState
+                                                                .pickupAddress ??
+                                                            'ตำแหน่งปัจจุบัน',
+                                                        dropoffAddress: reqState
+                                                                .dropoffAddress ??
+                                                            'ปลายทาง',
+                                                        carDetails:
+                                                            '${_selectedCar!.carBrand} ${_selectedCar!.carModel}',
+                                                        price: _estimatedPrice,
+                                                      ),
+                                                    ),
+                                                  );
+                                                }
+                                              } else {
+                                                throw Exception(
+                                                  'ไม่สามารถส่งข้อมูลเพื่อจับคู่กับคนขับได้ กรุณาลองใหม่อีกครั้ง',
+                                                );
+                                              }
+                                            } catch (e) {
+                                              if (context.mounted) {
+                                                ScaffoldMessenger.of(context)
+                                                    .showSnackBar(
+                                                  SnackBar(
+                                                    content: Text(
+                                                      'ไม่สามารถส่งคำขอเรียกรถได้: $e',
+                                                    ),
+                                                  ),
+                                                );
+                                              }
+                                            } finally {
+                                              if (mounted) {
+                                                setState(() {
+                                                  _isSubmitting = false;
+                                                });
+                                              }
+                                            }
+                                          },
+                                    icon: _isSubmitting
+                                        ? const SizedBox(
+                                            width: 20,
+                                            height: 20,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                              valueColor:
+                                                  AlwaysStoppedAnimation<Color>(
+                                                Colors.white,
+                                              ),
+                                            ),
+                                          )
+                                        : const Icon(
+                                            Icons.bolt,
+                                            color: Colors.white,
+                                          ),
+                                    label: Text(
+                                      _isSubmitting
+                                          ? 'กำลังส่งคำขอ...'
+                                          : 'เรียกคนขับ',
+                                      style: const TextStyle(
+                                        fontSize: 17,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: AppTheme.primaryColor,
+                                      foregroundColor: Colors.white,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius:
+                                            BorderRadius.circular(28),
+                                      ),
+                                      elevation: 0,
+                                    ),
                                   ),
                                 ),
-                              ),
-                              const Icon(
-                                Icons.chevron_right,
-                                color: Color(0xFF64748B),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-
-                      // Empty space to prevent bottom navigation overlaps
-                      const SizedBox(height: 170),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // 3. Bottom Button Panel (Overlayed at bottom)
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: Container(
-              padding: const EdgeInsets.all(24.0),
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(30),
-                  topRight: Radius.circular(30),
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black12,
-                    blurRadius: 15,
-                    spreadRadius: 2,
-                    offset: Offset(0, -3),
-                  ),
-                ],
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Estimated Price Row
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'ยอดรวมโดยประมาณ',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF64748B),
+                              ],
                             ),
                           ),
-                          if (_distanceInKm > 0)
-                            Text(
-                              'ระยะทาง ${_distanceInKm.toStringAsFixed(1)} กม.',
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: Color(0xFF94A3B8),
-                              ),
-                            ),
+
+                          const SizedBox(height: 20),
                         ],
-                      ),
-                      Text(
-                        '฿${_estimatedPrice.toStringAsFixed(0)}',
-                        style: const TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          color: AppTheme.primaryColor,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-
-                  // Call Driver Action Button
-                  SizedBox(
-                    width: double.infinity,
-                    height: 56,
-                    child: ElevatedButton.icon(
-                      onPressed: _selectedCar == null || _isSubmitting
-                          ? null
-                          : () async {
-                              final user = ref.read(userProvider);
-                              final balance = user?.walletBalance ?? 0.0;
-                              final isWallet = !_paymentMethod.startsWith('เงินสด');
-                              
-                              if (isWallet && balance < _estimatedPrice) {
-                                _showInsufficientBalanceDialog(balance);
-                                return;
-                              }
-
-                              if (reqState.pickupLatLng == null || reqState.dropoffLatLng == null) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('กรุณาระบุจุดรับและจุดส่งให้เรียบร้อยก่อนเรียกรถ')),
-                                );
-                                return;
-                              }
-
-                              setState(() {
-                                _isSubmitting = true;
-                              });
-
-                              try {
-                                final requestId = await ref
-                                    .read(requestDriverControllerProvider.notifier)
-                                    .createRequest(
-                                      dropoffLatitude: reqState.dropoffLatLng!.latitude,
-                                      dropoffLongitude: reqState.dropoffLatLng!.longitude,
-                                      isLadyMode: _ladyMode,
-                                      note: _remarksController.text.trim(),
-                                      paymentMethod: _paymentMethod,
-                                      pickupLatitude: reqState.pickupLatLng!.latitude,
-                                      pickupLongitude: reqState.pickupLatLng!.longitude,
-                                      reqDistance: _distanceInKm,
-                                      requestFee: _estimatedPrice,
-                                      userId: phoneNo,
-                                      userCarId: _selectedCar!.userCarId,
-                                    );
-
-                                if (requestId != null) {
-                                  if (context.mounted) {
-                                    Navigator.of(context).push(
-                                      MaterialPageRoute(
-                                        builder: (context) => WaitingDriverScreen(
-                                          requestId: requestId,
-                                          pickupAddress: reqState.pickupAddress ?? 'ตำแหน่งปัจจุบัน',
-                                          dropoffAddress: reqState.dropoffAddress ?? 'ปลายทาง',
-                                          carDetails: '${_selectedCar!.carBrand} ${_selectedCar!.carModel}',
-                                          price: _estimatedPrice,
-                                        ),
-                                      ),
-                                    );
-                                  }
-                                } else {
-                                  throw Exception('ไม่สามารถส่งข้อมูลเพื่อจับคู่กับคนขับได้ กรุณาลองใหม่อีกครั้ง');
-                                }
-                              } catch (e) {
-                                if (context.mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(content: Text('ไม่สามารถส่งคำขอเรียกรถได้: $e')),
-                                  );
-                                }
-                              } finally {
-                                if (mounted) {
-                                  setState(() {
-                                    _isSubmitting = false;
-                                  });
-                                }
-                              }
-                            },
-                      icon: _isSubmitting
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                              ),
-                            )
-                          : const Icon(Icons.bolt, color: Colors.white),
-                      label: Text(
-                        _isSubmitting ? 'กำลังส่งคำขอ...' : 'เรียกคนขับ',
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.primaryColor,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(28),
-                        ),
-                        elevation: 0,
                       ),
                     ),
                   ),
-                ],
-              ),
-            ),
+                ),
+              );
+            },
           ),
         ],
       ),
