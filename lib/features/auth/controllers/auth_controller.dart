@@ -10,7 +10,7 @@ class AuthController extends Notifier<bool> {
 
   Future<String?> login(String phone, String password) async {
     if (phone.isEmpty || password.isEmpty) {
-      return 'กรุณากรอกข้อมูลให้ครบถ้วน';
+      return 'กรุณากรอกข้อมูลให้ถูกต้อง';
     }
 
     state = true;
@@ -23,7 +23,7 @@ class AuthController extends Notifier<bool> {
       return null; // Null means success
     } catch (error) {
       state = false;
-      return error.toString().replaceAll('Exception: ', '');
+      return 'ไม่พบข้อมูลผู้ใช้';
     }
   }
 
@@ -43,7 +43,11 @@ class AuthController extends Notifier<bool> {
       return null; // Null means success
     } catch (error) {
       state = false;
-      return error.toString().replaceAll('Exception: ', '');
+      final err = error.toString().replaceAll('Exception: ', '');
+      if (err.contains('ซ') || err.contains('เบอร์โทรศัพท์นี้ถูกใช้งานแล้ว') || err.contains('already')) {
+        return 'ข้อมูลผู้ใช้ซํ้า กรุณาลองใหม่อีกครั้ง';
+      }
+      return err;
     }
   }
 }

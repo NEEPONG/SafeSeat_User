@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:safeseat_mini/core/utils/validators.dart';
 import 'package:safeseat_mini/data/models/request_driver_model.dart';
 import 'package:safeseat_mini/features/history/controllers/history_controller.dart';
 
@@ -24,10 +25,10 @@ class _HistoryTripReportScreenState extends ConsumerState<HistoryTripReportScree
   final _imagePicker = ImagePicker();
 
   final List<String> _categories = [
-    'ขับรถเร็วเกินกำหนด/อันตราย',
-    'พูดจาไม่สุภาพ/คุกคาม',
-    'ขอเก็บค่าบริการเพิ่มจากที่กำหนด',
-    'รถยนต์มีปัญหา/ไม่ตรงตามที่ระบุ',
+    'พฤติกรรมไม่เหมาะสม',
+    'ขับรถอันตราย',
+    'เรียกเก็บเงินเกินจริง',
+    'ทรัพย์สินเสียหาย',
     'อื่นๆ (โปรดระบุในคำอธิบาย)',
   ];
 
@@ -52,6 +53,18 @@ class _HistoryTripReportScreenState extends ConsumerState<HistoryTripReportScree
       );
 
       if (pickedFile != null) {
+        final path = pickedFile.path.toLowerCase();
+        if (!path.endsWith('.png') &&
+            !path.endsWith('.jpg') &&
+            !path.endsWith('.jpeg')) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('กรุณากรอกข้อมูลให้ครบถ้วน')),
+            );
+          }
+          return;
+        }
+
         setState(() {
           _selectedImages.add(File(pickedFile.path));
         });
@@ -68,16 +81,11 @@ class _HistoryTripReportScreenState extends ConsumerState<HistoryTripReportScree
   }
 
   Future<void> _submitReport() async {
-    if (_selectedCategory == null) {
+    if (_selectedCategory == null ||
+        _selectedTarget == null ||
+        !_formKey.currentState!.validate()) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('กรุณาเลือกประเภทเหตุการณ์')),
-      );
-      return;
-    }
-
-    if (_descriptionController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('กรุณาระบุคำอธิบายเหตุการณ์')),
+        const SnackBar(content: Text('กรุณากรอกข้อมูลให้ครบถ้วน')),
       );
       return;
     }
@@ -622,6 +630,7 @@ class _HistoryTripReportScreenState extends ConsumerState<HistoryTripReportScree
                 TextFormField(
                   controller: _descriptionController,
                   maxLines: 4,
+                  validator: AppValidators.validateReportDetail,
                   decoration: InputDecoration(
                     fillColor: Colors.white,
                     filled: true,
@@ -635,6 +644,14 @@ class _HistoryTripReportScreenState extends ConsumerState<HistoryTripReportScree
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(16),
                       borderSide: const BorderSide(color: Color(0xFF0D47A1), width: 1.5),
+                    ),
+                    errorBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: const BorderSide(color: Colors.red),
+                    ),
+                    focusedErrorBorder: const OutlineInputBorder(
+                      borderRadius: BorderRadius.all(Radius.circular(16)),
+                      borderSide: BorderSide(color: Colors.red, width: 1.5),
                     ),
                   ),
                 ),

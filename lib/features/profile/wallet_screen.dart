@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:safeseat_mini/core/theme/app_theme.dart';
 import 'package:safeseat_mini/core/controllers/user_controller.dart';
+import 'package:safeseat_mini/core/utils/validators.dart';
 import 'package:safeseat_mini/features/profile/controllers/profile_controller.dart';
 
 class WalletScreen extends ConsumerStatefulWidget {
@@ -15,6 +16,7 @@ class WalletScreen extends ConsumerStatefulWidget {
 }
 
 class _WalletScreenState extends ConsumerState<WalletScreen> {
+  final _formKey = GlobalKey<FormState>();
   final TextEditingController _customAmountController = TextEditingController();
   final FocusNode _customAmountFocusNode = FocusNode();
 
@@ -47,6 +49,7 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
       _customAmountController.text = amount.toString();
       _customAmountFocusNode.unfocus();
     });
+    _formKey.currentState?.validate();
   }
 
   double _getFinalAmount() {
@@ -57,17 +60,16 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
   }
 
   void _handleConfirmPayment(BuildContext context, double currentBalance) {
-    final amount = _getFinalAmount();
-    if (amount <= 0) {
+    if (!_formKey.currentState!.validate()) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('กรุณาระบุจำนวนเงินที่ต้องการเติม'),
-          backgroundColor: Colors.red,
+          content: Text('กรุณากรอกข้อมูลให้ถูกต้อง'),
         ),
       );
       return;
     }
 
+    final amount = _getFinalAmount();
     _showQrCodeDialog(context, currentBalance, amount);
   }
 
@@ -542,54 +544,66 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                     const SizedBox(height: 12),
 
                     // Custom Amount TextField
-                    Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: _customAmountFocusNode.hasFocus
-                              ? AppTheme.primaryColor
-                              : const Color(0xFFE2E8F0),
-                          width: _customAmountFocusNode.hasFocus ? 1.5 : 1,
-                        ),
-                      ),
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              controller: _customAmountController,
-                              focusNode: _customAmountFocusNode,
-                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                              inputFormatters: [
-                                FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
-                              ],
-                              decoration: const InputDecoration(
-                                hintText: 'ระบุจำนวนเงินเอง',
-                                hintStyle: TextStyle(
-                                  color: Color(0xFF94A3B8),
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.normal,
-                                ),
-                                border: InputBorder.none,
-                                contentPadding: EdgeInsets.symmetric(vertical: 16),
-                              ),
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w500,
-                                color: Color(0xFF0F172A),
-                              ),
-                            ),
-                          ),
-                          const Text(
-                            '฿',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF475569),
-                            ),
-                          ),
+                    Form(
+                      key: _formKey,
+                      child: TextFormField(
+                        controller: _customAmountController,
+                        focusNode: _customAmountFocusNode,
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                          LengthLimitingTextInputFormatter(5),
                         ],
+                        validator: AppValidators.validateAmount,
+                        onChanged: (val) {
+                          setState(() {});
+                        },
+                        decoration: InputDecoration(
+                          hintText: 'ระบุจำนวนเงินเอง',
+                          hintStyle: const TextStyle(
+                            color: Color(0xFF94A3B8),
+                            fontSize: 16,
+                            fontWeight: FontWeight.normal,
+                          ),
+                          fillColor: Colors.white,
+                          filled: true,
+                          suffixText: '฿',
+                          suffixStyle: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF475569),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 16,
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide:
+                                const BorderSide(color: Color(0xFFE2E8F0)),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(
+                              color: AppTheme.primaryColor,
+                              width: 1.5,
+                            ),
+                          ),
+                          errorBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: Colors.red),
+                          ),
+                          focusedErrorBorder: const OutlineInputBorder(
+                            borderRadius: BorderRadius.all(Radius.circular(12)),
+                            borderSide:
+                                BorderSide(color: Colors.red, width: 1.5),
+                          ),
+                        ),
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                          color: Color(0xFF0F172A),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 24),

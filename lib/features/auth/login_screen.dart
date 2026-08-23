@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:safeseat_mini/core/theme/app_theme.dart';
+import 'package:safeseat_mini/core/utils/validators.dart';
 import 'package:safeseat_mini/features/auth/register_screen.dart';
 import 'package:safeseat_mini/features/main_layout/main_layout.dart';
 import 'package:safeseat_mini/features/auth/controllers/auth_controller.dart';
@@ -51,6 +52,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           ).showSnackBar(SnackBar(content: Text(errorMsg)));
         }
       }
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('กรุณากรอกข้อมูลให้ถูกต้อง')),
+      );
     }
   }
 
@@ -134,15 +139,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           vertical: 16,
                         ),
                       ),
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'กรุณากรอกเบอร์โทรศัพท์';
-                        }
-                        if (value.length != 10) {
-                          return 'เบอร์โทรศัพท์ต้องมี 10 หลัก';
-                        }
-                        return null;
-                      },
+                      validator: AppValidators.validatePhone,
                     ),
                   ),
                   const SizedBox(height: 20),
@@ -196,12 +193,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           vertical: 16,
                         ),
                       ),
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'กรุณากรอกรหัสผ่าน';
-                        }
-                        return null;
-                      },
+                      validator: AppValidators.validatePassword,
                     ),
                   ),
                   const SizedBox(height: 16),

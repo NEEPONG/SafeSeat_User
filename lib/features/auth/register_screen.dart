@@ -35,22 +35,11 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   Future<void> _register() async {
     FocusScope.of(context).unfocus();
 
-    if (!_formKey.currentState!.validate()) {
-      return;
-    }
-
-    if (_selectedGender == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('กรุณาเลือกเพศของคุณ')));
-      return;
-    }
-
-    if (!_acceptTerms) {
+    if (!_formKey.currentState!.validate() ||
+        _selectedGender == null ||
+        !_acceptTerms) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('กรุณายอมรับข้อกำหนดและนโยบายก่อนดำเนินการ'),
-        ),
+        const SnackBar(content: Text('กรุณากรอกข้อมูลให้ถูกต้อง')),
       );
       return;
     }

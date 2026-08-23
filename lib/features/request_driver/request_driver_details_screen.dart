@@ -8,6 +8,7 @@ import 'package:safeseat_mini/core/controllers/user_controller.dart';
 import 'package:safeseat_mini/data/models/car_model.dart';
 import 'package:safeseat_mini/core/theme/app_theme.dart';
 import 'package:safeseat_mini/core/services/route_service.dart';
+import 'package:safeseat_mini/core/utils/validators.dart';
 import 'package:safeseat_mini/features/request_driver/payment_method_screen.dart';
 import 'package:safeseat_mini/features/request_driver/waiting_driver_screen.dart';
 
@@ -21,6 +22,7 @@ class RequestDriverDetailsScreen extends ConsumerStatefulWidget {
 
 class _RequestDriverDetailsScreenState
     extends ConsumerState<RequestDriverDetailsScreen> {
+  final _formKey = GlobalKey<FormState>();
   CarModel? _selectedCar;
   bool _ladyMode = false;
   final TextEditingController _remarksController = TextEditingController();
@@ -547,9 +549,11 @@ class _RequestDriverDetailsScreenState
                     top: false,
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
+                      child: Form(
+                        key: _formKey,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
                           // Grab Handle Bar
                           Center(
                             child: Container(
@@ -876,9 +880,10 @@ class _RequestDriverDetailsScreenState
                             ),
                           ),
                           const SizedBox(height: 8),
-                          TextField(
+                          TextFormField(
                             controller: _remarksController,
                             maxLines: 2,
+                            validator: AppValidators.validateNote,
                             decoration: InputDecoration(
                               hintText:
                                   'ระบุหมายเหตุ เช่น จุดสังเกต หรือสิ่งที่ต้องการแจ้งคนขับ',
@@ -899,6 +904,19 @@ class _RequestDriverDetailsScreenState
                                 borderRadius: BorderRadius.all(Radius.circular(16)),
                                 borderSide: BorderSide(
                                   color: AppTheme.primaryColor,
+                                  width: 1.5,
+                                ),
+                              ),
+                              errorBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(16),
+                                borderSide: const BorderSide(
+                                  color: Colors.red,
+                                ),
+                              ),
+                              focusedErrorBorder: const OutlineInputBorder(
+                                borderRadius: BorderRadius.all(Radius.circular(16)),
+                                borderSide: BorderSide(
+                                  color: Colors.red,
                                   width: 1.5,
                                 ),
                               ),
@@ -1029,10 +1047,24 @@ class _RequestDriverDetailsScreenState
                                   width: double.infinity,
                                   height: 54,
                                   child: ElevatedButton.icon(
-                                    onPressed: _selectedCar == null ||
-                                            _isSubmitting
+                                    onPressed: _isSubmitting
                                         ? null
                                         : () async {
+                                            if (!_formKey.currentState!.validate() ||
+                                                _selectedCar == null ||
+                                                reqState.pickupLatLng == null ||
+                                                reqState.dropoffLatLng == null) {
+                                              ScaffoldMessenger.of(context)
+                                                  .showSnackBar(
+                                                const SnackBar(
+                                                  content: Text(
+                                                    'กรุณากรอกข้อมูลให้ครบถ้วน',
+                                                  ),
+                                                ),
+                                              );
+                                              return;
+                                            }
+
                                             final user =
                                                 ref.read(userProvider);
                                             final balance =
@@ -1044,19 +1076,6 @@ class _RequestDriverDetailsScreenState
                                                 balance < _estimatedPrice) {
                                               _showInsufficientBalanceDialog(
                                                 balance,
-                                              );
-                                              return;
-                                            }
-
-                                            if (reqState.pickupLatLng == null ||
-                                                reqState.dropoffLatLng == null) {
-                                              ScaffoldMessenger.of(context)
-                                                  .showSnackBar(
-                                                const SnackBar(
-                                                  content: Text(
-                                                    'กรุณาระบุจุดรับและจุดส่งให้เรียบร้อยก่อนเรียกรถ',
-                                                  ),
-                                                ),
                                               );
                                               return;
                                             }
@@ -1117,17 +1136,24 @@ class _RequestDriverDetailsScreenState
                                                   );
                                                 }
                                               } else {
-                                                throw Exception(
-                                                  'ไม่สามารถส่งข้อมูลเพื่อจับคู่กับคนขับได้ กรุณาลองใหม่อีกครั้ง',
-                                                );
+                                                if (context.mounted) {
+                                                  ScaffoldMessenger.of(context)
+                                                      .showSnackBar(
+                                                    const SnackBar(
+                                                      content: Text(
+                                                        'ไม่สามารถบันทึกข้อมูลได้ กรุณาลองใหม่อีกครั้ง',
+                                                      ),
+                                                    ),
+                                                  );
+                                                }
                                               }
                                             } catch (e) {
                                               if (context.mounted) {
                                                 ScaffoldMessenger.of(context)
                                                     .showSnackBar(
-                                                  SnackBar(
+                                                  const SnackBar(
                                                     content: Text(
-                                                      'ไม่สามารถส่งคำขอเรียกรถได้: $e',
+                                                      'ไม่สามารถบันทึกข้อมูลได้ กรุณาลองใหม่อีกครั้ง',
                                                     ),
                                                   ),
                                                 );
@@ -1170,7 +1196,7 @@ class _RequestDriverDetailsScreenState
                                       foregroundColor: Colors.white,
                                       shape: RoundedRectangleBorder(
                                         borderRadius:
-                                            BorderRadius.circular(28),
+                                          BorderRadius.circular(28),
                                       ),
                                       elevation: 0,
                                     ),
@@ -1186,8 +1212,9 @@ class _RequestDriverDetailsScreenState
                     ),
                   ),
                 ),
-              );
-            },
+              ),
+            );
+          },
           ),
         ],
       ),

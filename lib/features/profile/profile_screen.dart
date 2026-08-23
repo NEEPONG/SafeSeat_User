@@ -4,6 +4,7 @@ import 'package:safeseat_mini/core/theme/app_theme.dart';
 import 'package:safeseat_mini/features/profile/edit_profile_screen.dart';
 import 'package:safeseat_mini/core/controllers/user_controller.dart';
 import 'package:safeseat_mini/features/profile/wallet_screen.dart';
+import 'package:safeseat_mini/features/auth/login_screen.dart';
 
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
@@ -314,9 +315,105 @@ class ProfileScreen extends ConsumerWidget {
                 ],
               ),
             ),
+            const SizedBox(height: 12),
+
+            // Logout Button
+            SizedBox(
+              width: double.infinity,
+              height: 52,
+              child: OutlinedButton.icon(
+                onPressed: () => _showLogoutDialog(context, ref),
+                icon: const Icon(Icons.logout, color: Colors.red, size: 20),
+                label: const Text(
+                  'ออกจากระบบ',
+                  style: TextStyle(
+                    color: Colors.red,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: Color(0xFFFCA5A5)),
+                  backgroundColor: const Color(0xFFFEF2F2),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+              ),
+            ),
+
             const SizedBox(height: 32),
           ],
         ),
+      ),
+    );
+  }
+
+  void _showLogoutDialog(BuildContext context, WidgetRef ref) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        title: const Row(
+          children: [
+            Icon(Icons.logout, color: Colors.red, size: 24),
+            SizedBox(width: 8),
+            Text(
+              'ออกจากระบบ',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 18,
+              ),
+            ),
+          ],
+        ),
+        content: const Text(
+          'คุณแน่ใจหรือไม่ว่าต้องการออกจากระบบ?',
+          style: TextStyle(fontSize: 15, color: Color(0xFF475569)),
+        ),
+        actionsPadding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text(
+              'ยกเลิก',
+              style: TextStyle(
+                color: Color(0xFF64748B),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.of(dialogContext).pop();
+              ref.read(userProvider.notifier).clearUser();
+              Navigator.of(context).pushAndRemoveUntil(
+                MaterialPageRoute(builder: (context) => const LoginScreen()),
+                (route) => false,
+              );
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('ออกจากระบบเรียบร้อยแล้ว'),
+                ),
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              elevation: 0,
+            ),
+            child: const Text(
+              'ออกจากระบบ',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
       ),
     );
   }

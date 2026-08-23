@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:safeseat_mini/core/theme/app_theme.dart';
+import 'package:safeseat_mini/core/utils/validators.dart';
 import 'package:safeseat_mini/data/models/request_driver_model.dart';
 import 'package:safeseat_mini/data/models/review_model.dart';
 import 'package:safeseat_mini/features/history/controllers/history_controller.dart';
@@ -20,6 +21,7 @@ class HistoryTripReviewScreen extends ConsumerStatefulWidget {
 }
 
 class _HistoryTripReviewScreenState extends ConsumerState<HistoryTripReviewScreen> {
+  final _formKey = GlobalKey<FormState>();
   int _driverRating = 0;
   int _coDriverRating = 0;
   final TextEditingController _driverCommentController = TextEditingController();
@@ -103,6 +105,7 @@ class _HistoryTripReviewScreenState extends ConsumerState<HistoryTripReviewScree
     required TextEditingController controller,
     required String badgeText,
     required Color badgeColor,
+    String? Function(String?)? validator,
   }) {
     return Container(
       padding: const EdgeInsets.all(20.0),
@@ -203,10 +206,11 @@ class _HistoryTripReviewScreenState extends ConsumerState<HistoryTripReviewScree
           ),
           const SizedBox(height: 8),
           // Textfield
-          TextField(
+          TextFormField(
             controller: controller,
             maxLines: 3,
             readOnly: isReadOnly,
+            validator: validator,
             decoration: InputDecoration(
               hintText: 'บอกเราเกี่ยวกับประสบการณ์ของคุณ',
               hintStyle: const TextStyle(
@@ -224,8 +228,21 @@ class _HistoryTripReviewScreenState extends ConsumerState<HistoryTripReviewScree
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(16),
-                borderSide: BorderSide(
+                borderSide: const BorderSide(
                   color: AppTheme.primaryColor,
+                  width: 1.5,
+                ),
+              ),
+              errorBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: const BorderSide(
+                  color: Colors.red,
+                ),
+              ),
+              focusedErrorBorder: const OutlineInputBorder(
+                borderRadius: BorderRadius.all(Radius.circular(16)),
+                borderSide: BorderSide(
+                  color: Colors.red,
                   width: 1.5,
                 ),
               ),
@@ -298,8 +315,10 @@ class _HistoryTripReviewScreenState extends ConsumerState<HistoryTripReviewScree
             Expanded(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
-                child: Column(
-                  children: [
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    children: [
                     // 1. Trip Locations Card
                     Container(
                       padding: const EdgeInsets.all(16.0),
@@ -420,6 +439,7 @@ class _HistoryTripReviewScreenState extends ConsumerState<HistoryTripReviewScree
                       controller: _driverCommentController,
                       badgeText: 'D1',
                       badgeColor: const Color(0xFF2563EB),
+                      validator: AppValidators.validateReviewComment,
                     ),
                     const SizedBox(height: 16),
 
@@ -438,12 +458,14 @@ class _HistoryTripReviewScreenState extends ConsumerState<HistoryTripReviewScree
                       controller: _coDriverCommentController,
                       badgeText: 'D2',
                       badgeColor: const Color(0xFF475569),
+                      validator: AppValidators.validateReviewComment,
                     ),
                     const SizedBox(height: 16),
                   ],
                 ),
               ),
             ),
+          ),
             // Bottom Submit Button
             if (!isReadOnly)
               Container(
@@ -462,11 +484,24 @@ class _HistoryTripReviewScreenState extends ConsumerState<HistoryTripReviewScree
                 width: double.infinity,
                 height: 52,
                 child: ElevatedButton.icon(
-                  onPressed: (_driverRating == 0 && _coDriverRating == 0)
-                      ? null
-                      : () async {
-                          if (!context.mounted) return;
-                          // Show loading indicator
+                  onPressed: () async {
+                    if (_driverRating == 0 || _coDriverRating == 0) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content:
+                              Text('กรุณาเลือกคะแนนความพึงพอใจก่อนยืนยัน'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                      return;
+                    }
+
+                    if (!_formKey.currentState!.validate()) {
+                      return;
+                    }
+
+                    if (!context.mounted) return;
+                    // Show loading indicator
                           showDialog(
                             context: context,
                             barrierDismissible: false,
