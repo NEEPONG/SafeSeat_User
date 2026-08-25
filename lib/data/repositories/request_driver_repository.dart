@@ -44,7 +44,17 @@ class RequestDriverRepository {
       final request = data['request'];
       return request != null ? request['requestid'] as int? : null;
     }
-    throw Exception('Failed to create request');
+
+    String errorMsg = 'ไม่สามารถสร้างคำขอได้ กรุณาลองใหม่อีกครั้ง';
+    try {
+      final data = jsonDecode(response.body);
+      if (data['message'] != null) {
+        errorMsg = data['message'].toString();
+      } else if (data['error'] != null) {
+        errorMsg = data['error'].toString();
+      }
+    } catch (_) {}
+    throw Exception(errorMsg);
   }
 
   Future<RequestDriverModel?> checkRequestStatus(int requestId) async {
@@ -135,7 +145,37 @@ class RequestDriverRepository {
       body: jsonEncode(report.toJson()),
     );
 
-    return response.statusCode == 201;
+    if (response.statusCode != 201) {
+      String message = 'Failed to submit driver report';
+      try {
+        final data = jsonDecode(response.body);
+        if (data['error'] != null) message = data['error'].toString();
+      } catch (_) {}
+      throw Exception(message);
+    }
+
+    return true;
+  }
+
+  Future<Map<String, dynamic>> checkDriverReport(int requestId) async {
+    final url = Uri.parse('${ApiConstants.baseUrl}/api/driver-reports/check/$requestId');
+    final response = await http.get(url, headers: {'Content-Type': 'application/json'});
+    
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      DriverReportModel? report;
+      if (data['report'] != null) {
+        report = DriverReportModel.fromJson(data['report']);
+      }
+      return {
+        'hasReported': data['hasReported'] ?? false,
+        'report': report,
+      };
+    }
+    return {
+      'hasReported': false,
+      'report': null,
+    };
   }
 
   Future<List<DriverReportModel>> getReportsByUser(String userId) async {

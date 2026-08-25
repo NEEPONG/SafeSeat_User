@@ -1083,6 +1083,14 @@ class _RequestDriverDetailsScreenState
                                                   );
 
                                               if (requestId != null) {
+                                                // Refresh user profile to immediately reflect deducted wallet balance
+                                                ref
+                                                    .read(
+                                                      profileControllerProvider
+                                                          .notifier,
+                                                    )
+                                                    .getUserProfile(phoneNo);
+
                                                 if (context.mounted) {
                                                   Navigator.of(context).push(
                                                     MaterialPageRoute(
@@ -1112,10 +1120,8 @@ class _RequestDriverDetailsScreenState
                                               }
                                             } catch (e) {
                                               if (context.mounted) {
-                                                AppSnackBar.showError(
-                                                  context,
-                                                  'เกิดข้อผิดพลาดในการสร้างคำขอ: $e',
-                                                );
+                                                final errorMsg = e.toString().replaceFirst('Exception: ', '');
+                                                  AppSnackBar.showError(context, errorMsg);
                                               }
                                             } finally {
                                               if (mounted) {

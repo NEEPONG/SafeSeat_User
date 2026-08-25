@@ -4,11 +4,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:safeseat_mini/core/theme/app_theme.dart';
 import 'package:safeseat_mini/core/widgets/driver_avatar.dart';
+import 'package:safeseat_mini/data/models/driver_report_model.dart';
 import 'package:safeseat_mini/data/models/request_driver_model.dart';
 import 'package:safeseat_mini/data/models/review_model.dart';
 import 'package:safeseat_mini/features/history/controllers/history_controller.dart';
 import 'package:safeseat_mini/features/history/history_trip_review_screen.dart';
 import 'package:safeseat_mini/features/history/history_trip_report_screen.dart';
+import 'package:safeseat_mini/features/history/history_report_details_screen.dart';
 
 class HistoryTripDetailsScreen extends ConsumerStatefulWidget {
   final RequestDriverModel trip;
@@ -22,11 +24,14 @@ class HistoryTripDetailsScreen extends ConsumerStatefulWidget {
 class _HistoryTripDetailsScreenState extends ConsumerState<HistoryTripDetailsScreen> {
   bool _hasReviewed = false;
   List<ReviewModel> _existingReviews = [];
+  bool _hasReported = false;
+  DriverReportModel? _existingReport;
 
   @override
   void initState() {
     super.initState();
     _checkReviewStatus();
+    _checkReportStatus();
   }
 
   Future<void> _checkReviewStatus() async {
@@ -38,6 +43,22 @@ class _HistoryTripDetailsScreenState extends ConsumerState<HistoryTripDetailsScr
         setState(() {
           _hasReviewed = checkResult['hasReviewed'] ?? false;
           _existingReviews = List<ReviewModel>.from(checkResult['reviews'] ?? []);
+        });
+      }
+    } catch (e) {
+      // Ignored
+    }
+  }
+
+  Future<void> _checkReportStatus() async {
+    try {
+      final checkResult = await ref
+          .read(historyReportControllerProvider.notifier)
+          .checkReportStatus(widget.trip.requestId);
+      if (mounted) {
+        setState(() {
+          _hasReported = checkResult['hasReported'] ?? false;
+          _existingReport = checkResult['report'] as DriverReportModel?;
         });
       }
     } catch (e) {
@@ -856,25 +877,40 @@ class _HistoryTripDetailsScreenState extends ConsumerState<HistoryTripDetailsScr
                         width: double.infinity,
                         height: 52,
                         child: OutlinedButton.icon(
-                          onPressed: () {
-                            Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (context) => HistoryTripReportScreen(trip: trip),
-                              ),
-                            );
+                          onPressed: () async {
+                            if (_hasReported && _existingReport != null) {
+                              await Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (context) => HistoryReportDetailsScreen(report: _existingReport!),
+                                ),
+                              );
+                            } else {
+                              await Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (context) => HistoryTripReportScreen(trip: trip),
+                                ),
+                              );
+                            }
+                            _checkReportStatus();
                           },
-                          icon: const Icon(Icons.error_outline_rounded, color: Color(0xFF64748B)),
-                          label: const Text(
-                            'รายงานคนขับ',
+                          icon: Icon(
+                            _hasReported ? Icons.assignment_turned_in_rounded : Icons.error_outline_rounded,
+                            color: _hasReported ? const Color(0xFF0D47A1) : const Color(0xFF64748B),
+                          ),
+                          label: Text(
+                            _hasReported ? 'ดูรายงานที่คุณแจ้งไว้' : 'รายงานคนขับ',
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
-                              color: Color(0xFF64748B),
+                              color: _hasReported ? const Color(0xFF0D47A1) : const Color(0xFF64748B),
                             ),
                           ),
                           style: OutlinedButton.styleFrom(
-                            backgroundColor: const Color(0xFFF8FAFC),
-                            side: const BorderSide(color: Color(0xFFE2E8F0)),
+                            backgroundColor: _hasReported ? const Color(0xFFEFF6FF) : const Color(0xFFF8FAFC),
+                            side: BorderSide(
+                              color: _hasReported ? const Color(0xFF93C5FD) : const Color(0xFFE2E8F0),
+                              width: _hasReported ? 1.5 : 1.0,
+                            ),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(16),
                             ),

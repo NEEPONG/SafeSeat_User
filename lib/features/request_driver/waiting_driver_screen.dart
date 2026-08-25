@@ -6,6 +6,8 @@ import 'package:safeseat_mini/core/theme/app_theme.dart';
 import 'package:safeseat_mini/core/utils/app_feedback.dart';
 import 'package:safeseat_mini/features/request_driver/controllers/request_driver_controller.dart';
 import 'package:safeseat_mini/features/request_driver/active_trip_screen.dart';
+import 'package:safeseat_mini/features/profile/controllers/profile_controller.dart';
+import 'package:safeseat_mini/core/controllers/user_controller.dart';
 import 'package:safeseat_mini/data/models/request_driver_model.dart';
 
 class WaitingDriverScreen extends ConsumerStatefulWidget {
@@ -113,6 +115,11 @@ class _WaitingDriverScreenState extends ConsumerState<WaitingDriverScreen> with 
 
       if (success) {
         _statusTimer?.cancel();
+        // Refresh wallet balance to reflect refund
+        final user = ref.read(userProvider);
+        if (user != null) {
+          ref.read(profileControllerProvider.notifier).getUserProfile(user.phoneNo);
+        }
         AppSnackBar.showSuccess(context, 'ยกเลิกรายการเรียกรถเรียบร้อยแล้ว');
         Navigator.of(context).pop(); // Go back to details
       } else {

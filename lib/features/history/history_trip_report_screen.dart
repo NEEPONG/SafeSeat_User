@@ -48,6 +48,20 @@ class _HistoryTripReportScreenState extends ConsumerState<HistoryTripReportScree
     } else {
       _selectedTarget = 'ALL';
     }
+
+    _checkExistingReport();
+  }
+
+  Future<void> _checkExistingReport() async {
+    try {
+      final status = await ref
+          .read(historyReportControllerProvider.notifier)
+          .checkReportStatus(widget.trip.requestId);
+      if (status['hasReported'] == true && mounted) {
+        AppSnackBar.showWarning(context, 'รายการนี้เคยถูกรายงานไปแล้ว ไม่สามารถรายงานซ้ำได้');
+        Navigator.of(context).pop();
+      }
+    } catch (_) {}
   }
 
   @override
@@ -158,6 +172,7 @@ class _HistoryTripReportScreenState extends ConsumerState<HistoryTripReportScree
       AppDialog.hideLoading(context);
 
       if (success) {
+        ref.invalidate(userReportsListProvider);
         // Show success dialog
         AppDialog.showSuccess(
           context: context,
@@ -167,7 +182,7 @@ class _HistoryTripReportScreenState extends ConsumerState<HistoryTripReportScree
           buttonText: 'ตกลง',
           onDismiss: () {
             if (mounted) {
-              Navigator.of(context).pop(); // pop report screen
+              Navigator.of(context).pop(true); // pop report screen with success
             }
           },
         );
@@ -180,7 +195,8 @@ class _HistoryTripReportScreenState extends ConsumerState<HistoryTripReportScree
     } catch (e) {
       if (mounted) {
         AppDialog.hideLoading(context);
-        AppSnackBar.showError(context, 'เกิดข้อผิดพลาด: $e');
+        final errorMsg = e.toString().replaceFirst('Exception: ', '');
+        AppSnackBar.showError(context, errorMsg);
       }
     }
   }
