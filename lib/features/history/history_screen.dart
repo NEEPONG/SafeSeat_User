@@ -220,22 +220,49 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                   ? const Color(0xFFFFF7ED)
                   : const Color(0xFFECFDF5);
 
-              // Extract driver names from requestByUser map
+              // Extract reported driver info and clean detail
+              final rawDetail = report.reportDetail ?? '';
+              final idMatch = RegExp(r'\[ID:\s*([^\]]+)\]', caseSensitive: false).firstMatch(rawDetail);
+              final List<String> reportedIds = idMatch != null && idMatch.group(1) != null
+                  ? idMatch.group(1)!.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList()
+                  : [];
+              final cleanDetail = rawDetail
+                  .replaceAll(RegExp(r'\[ID:\s*[^\]]+\]\s*', caseSensitive: false), '')
+                  .replaceAll(RegExp(r'\[เป้าหมาย:\s*[^\]]+\]\s*', caseSensitive: false), '')
+                  .trim();
+
               String driverInfo = 'ไม่มีข้อมูลคนขับ';
               final req = report.requestByUser;
               if (req != null) {
                 final leader = req['leader'];
                 final follower = req['follower'];
                 final List<String> drivers = [];
-                if (leader != null) {
-                  drivers.add('คนขับหลัก: ${leader['firstname']} ${leader['lastname']}');
+
+                if (reportedIds.isNotEmpty) {
+                  if (leader != null && reportedIds.contains(leader['username'])) {
+                    drivers.add('คนขับหลัก: ${leader['firstname']} ${leader['lastname']}');
+                  }
+                  if (follower != null && reportedIds.contains(follower['username'])) {
+                    drivers.add('ผู้ช่วยคนขับ: ${follower['firstname']} ${follower['lastname']}');
+                  }
                 }
-                if (follower != null) {
-                  drivers.add('ผู้ติดตาม: ${follower['firstname']} ${follower['lastname']}');
+
+                if (drivers.isEmpty) {
+                  if (leader != null) {
+                    drivers.add('คนขับหลัก: ${leader['firstname']} ${leader['lastname']}');
+                  }
+                  if (follower != null) {
+                    drivers.add('ผู้ช่วยคนขับ: ${follower['firstname']} ${follower['lastname']}');
+                  }
                 }
+
                 if (drivers.isNotEmpty) {
                   driverInfo = drivers.join('\n');
                 }
+              }
+
+              if (driverInfo == 'ไม่มีข้อมูลคนขับ' && reportedIds.isNotEmpty) {
+                driverInfo = 'ผู้ถูกรายงาน: @${reportedIds.join(', @')}';
               }
 
               // Parse image thumbnail path if exists
@@ -324,10 +351,10 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                                   height: 1.4,
                                 ),
                               ),
-                              if (report.reportDetail != null && report.reportDetail!.isNotEmpty) ...[
+                              if (cleanDetail.isNotEmpty) ...[
                                 const SizedBox(height: 8),
                                 Text(
-                                  report.reportDetail!,
+                                  cleanDetail,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: const TextStyle(

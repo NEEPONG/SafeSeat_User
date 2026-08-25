@@ -20,7 +20,7 @@ class _HistoryTripReportScreenState extends ConsumerState<HistoryTripReportScree
   final _descriptionController = TextEditingController();
   
   String? _selectedCategory;
-  String? _selectedTarget = 'ทั้งหมด';
+  String _selectedTarget = 'ALL';
   final List<File> _selectedImages = [];
   final _imagePicker = ImagePicker();
 
@@ -31,6 +31,22 @@ class _HistoryTripReportScreenState extends ConsumerState<HistoryTripReportScree
     'ทรัพย์สินเสียหาย',
     'อื่นๆ (โปรดระบุในคำอธิบาย)',
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    // Initialize default target based on available drivers
+    final trip = widget.trip;
+    if (trip.leader != null && trip.follower != null) {
+      _selectedTarget = 'ALL';
+    } else if (trip.leader != null) {
+      _selectedTarget = 'LEADER';
+    } else if (trip.follower != null) {
+      _selectedTarget = 'FOLLOWER';
+    } else {
+      _selectedTarget = 'ALL';
+    }
+  }
 
   @override
   void dispose() {
@@ -81,9 +97,7 @@ class _HistoryTripReportScreenState extends ConsumerState<HistoryTripReportScree
   }
 
   Future<void> _submitReport() async {
-    if (_selectedCategory == null ||
-        _selectedTarget == null ||
-        !_formKey.currentState!.validate()) {
+    if (_selectedCategory == null || !_formKey.currentState!.validate()) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('กรุณากรอกข้อมูลให้ครบถ้วน')),
       );
@@ -103,10 +117,36 @@ class _HistoryTripReportScreenState extends ConsumerState<HistoryTripReportScree
       // 1. Prepare report index based on selected category
       final reportIndex = _categories.indexOf(_selectedCategory!);
 
-      // Append target info to detail if specific target is selected
+      // Collect target driver ID(s)
+      final List<String> targetDriverIds = [];
+      final leader = widget.trip.leader;
+      final follower = widget.trip.follower;
+
+      if (_selectedTarget == 'ALL') {
+        if (leader != null && leader.username.isNotEmpty) {
+          targetDriverIds.add(leader.username);
+        }
+        if (follower != null && follower.username.isNotEmpty) {
+          targetDriverIds.add(follower.username);
+        }
+      } else if (_selectedTarget == 'LEADER') {
+        if (leader != null && leader.username.isNotEmpty) {
+          targetDriverIds.add(leader.username);
+        }
+      } else if (_selectedTarget == 'FOLLOWER') {
+        if (follower != null && follower.username.isNotEmpty) {
+          targetDriverIds.add(follower.username);
+        }
+      }
+
+      // Format report detail: [ID: id1,id2] detail text
       String detailText = _descriptionController.text.trim();
-      if (_selectedTarget != null && _selectedTarget != 'ทั้งหมด') {
-        detailText = '[เป้าหมาย: $_selectedTarget] $detailText';
+      if (targetDriverIds.isNotEmpty) {
+        detailText = '[ID: ${targetDriverIds.join(',')}] $detailText';
+      }
+      // Ensure maximum length of 255 characters for database varchar(255)
+      if (detailText.length > 255) {
+        detailText = detailText.substring(0, 255);
       }
 
       // 2. Submit via historyReportControllerProvider
@@ -224,19 +264,29 @@ class _HistoryTripReportScreenState extends ConsumerState<HistoryTripReportScree
     const dropoffPoint = 'บ้านนิ่มในเชียงใหม่แสนไกล';
 
     // Build the driver targets list based on available drivers
-    final List<DropdownMenuItem<String>> targetItems = [
-      const DropdownMenuItem(value: 'ทั้งหมด', child: Text('ทั้งหมด')),
-    ];
+    final List<DropdownMenuItem<String>> targetItems = [];
+    if (trip.leader != null && trip.follower != null) {
+      targetItems.add(const DropdownMenuItem(
+        value: 'ALL',
+        child: Text('ทุกคนในทริปนี้ (ทั้ง 2 คน)'),
+      ));
+    }
     if (trip.leader != null) {
       targetItems.add(DropdownMenuItem(
-        value: 'หัวหน้าทีม (${trip.leader!.firstname})',
-        child: Text('หัวหน้าทีม (${trip.leader!.firstname})'),
+        value: 'LEADER',
+        child: Text('คนขับหลัก (${trip.leader!.firstname} ${trip.leader!.lastname})'),
       ));
     }
     if (trip.follower != null) {
       targetItems.add(DropdownMenuItem(
-        value: 'ผู้ติดตาม (${trip.follower!.firstname})',
-        child: Text('ผู้ติดตาม (${trip.follower!.firstname})'),
+        value: 'FOLLOWER',
+        child: Text('ผู้ช่วยคนขับ (${trip.follower!.firstname} ${trip.follower!.lastname})'),
+      ));
+    }
+    if (targetItems.isEmpty) {
+      targetItems.add(const DropdownMenuItem(
+        value: 'ALL',
+        child: Text('ผู้ขับรถในทริปนี้'),
       ));
     }
 
@@ -612,7 +662,7 @@ class _HistoryTripReportScreenState extends ConsumerState<HistoryTripReportScree
                   items: targetItems,
                   onChanged: (val) {
                     setState(() {
-                      _selectedTarget = val;
+                      _selectedTarget = val ?? 'ALL';
                     });
                   },
                 ),
@@ -630,6 +680,7 @@ class _HistoryTripReportScreenState extends ConsumerState<HistoryTripReportScree
                 TextFormField(
                   controller: _descriptionController,
                   maxLines: 4,
+                  maxLength: 200,
                   validator: AppValidators.validateReportDetail,
                   decoration: InputDecoration(
                     fillColor: Colors.white,
