@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:safeseat_mini/core/controllers/user_controller.dart';
+import 'package:safeseat_mini/core/utils/app_feedback.dart';
 import 'package:safeseat_mini/core/utils/validators.dart';
 import 'package:safeseat_mini/features/profile/controllers/profile_controller.dart';
 import 'package:safeseat_mini/data/models/car_model.dart';
@@ -61,16 +62,13 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
 
   void _saveProfile() async {
     if (!_formKey.currentState!.validate()) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('กรุณากรอกข้อมูลให้ถูกต้อง')),
-      );
+      AppSnackBar.showWarning(context, 'กรุณากรอกข้อมูลให้ถูกต้องครบถ้วน');
       return;
     }
 
     final currentUser = ref.read(userProvider);
     if (currentUser == null) return;
     
-    final scaffoldMessenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
 
     final success = await ref.read(profileControllerProvider.notifier).editProfileWithImage(
@@ -83,14 +81,10 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     );
 
     if (success && mounted) {
-      scaffoldMessenger.showSnackBar(
-        const SnackBar(content: Text('บันทึกข้อมูลเรียบร้อยแล้ว')),
-      );
+      AppSnackBar.showSuccess(context, 'บันทึกข้อมูลโปรไฟล์เรียบร้อยแล้ว');
       navigator.pop();
     } else if (mounted) {
-      scaffoldMessenger.showSnackBar(
-        const SnackBar(content: Text('บันทึกข้อมูลไม่สำเร็จ กรุณาลองใหม่')),
-      );
+      AppSnackBar.showError(context, 'บันทึกข้อมูลไม่สำเร็จ กรุณาลองใหม่อีกครั้ง');
     }
   }
 
@@ -217,10 +211,9 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                         onPressed: () async {
                           if (!carFormKey.currentState!.validate() ||
                               selectedCarType == null) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('กรุณากรอกข้อมูลให้ครบถ้วน'),
-                              ),
+                            AppSnackBar.showWarning(
+                              context,
+                              'กรุณากรอกข้อมูลยานพาหนะและเลือกประเภทรถให้ครบถ้วน',
                             );
                             return;
                           }
@@ -235,21 +228,19 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                             userId: currentUser.phoneNo,
                           );
 
-                          final scaffoldMessenger = ScaffoldMessenger.of(context);
                           final navigator = Navigator.of(context);
                           final success = await ref
                               .read(profileControllerProvider.notifier)
                               .addUserCar(newCar);
-                          if (success && mounted) {
+                          if (!context.mounted) return;
+
+                          if (success) {
                             navigator.pop();
-                            scaffoldMessenger.showSnackBar(
-                              const SnackBar(content: Text('เพิ่มรถสำเร็จ')),
-                            );
-                          } else if (mounted) {
-                            scaffoldMessenger.showSnackBar(
-                              const SnackBar(
-                                content: Text('เกิดข้อผิดพลาดในการเพิ่มรถ'),
-                              ),
+                            AppSnackBar.showSuccess(context, 'เพิ่มยานพาหนะสำเร็จ');
+                          } else {
+                            AppSnackBar.showError(
+                              context,
+                              'เกิดข้อผิดพลาดในการเพิ่มยานพาหนะ กรุณาลองใหม่',
                             );
                           }
                         },
@@ -491,7 +482,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
                         itemCount: cars.length,
-                        itemBuilder: (context, index) {
+                        itemBuilder: (itemContext, index) {
                           final car = cars[index];
                           return Container(
                             margin: const EdgeInsets.only(bottom: 12),
@@ -544,34 +535,29 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                                 ),
                                 IconButton(
                                   icon: const Icon(Icons.delete_outline, color: Colors.red),
-                                  onPressed: () {
-                                    showDialog(
+                                  onPressed: () async {
+                                    final confirmed = await AppDialog.showConfirm(
                                       context: context,
-                                      builder: (context) => AlertDialog(
-                                        title: const Text('ยืนยันการลบ'),
-                                        content: const Text('คุณแน่ใจหรือไม่ว่าต้องการลบยานพาหนะคันนี้?'),
-                                        actions: [
-                                          TextButton(
-                                            onPressed: () => Navigator.pop(context),
-                                            child: const Text('ยกเลิก', style: TextStyle(color: Colors.grey)),
-                                          ),
-                                          TextButton(
-                                            onPressed: () async {
-                                              final scaffoldMessenger = ScaffoldMessenger.of(context);
-                                              final navigator = Navigator.of(context);
-                                              navigator.pop();
-                                              final success = await ref.read(profileControllerProvider.notifier).deleteUserCar(car.userCarId, currentUser.phoneNo);
-                                              if (success && mounted) {
-                                                scaffoldMessenger.showSnackBar(const SnackBar(content: Text('ลบยานพาหนะสำเร็จ')));
-                                              } else if (mounted) {
-                                                scaffoldMessenger.showSnackBar(const SnackBar(content: Text('ลบยานพาหนะไม่สำเร็จ')));
-                                              }
-                                            },
-                                            child: const Text('ลบ', style: TextStyle(color: Colors.red)),
-                                          ),
-                                        ],
-                                      ),
+                                      title: 'ยืนยันการลบยานพาหนะ',
+                                      message: 'คุณแน่ใจหรือไม่ว่าต้องการลบ ${car.carBrand} ${car.carModel} (${car.carPlate}) ออกจากรายการ?',
+                                      confirmText: 'ลบยานพาหนะ',
+                                      cancelText: 'ยกเลิก',
+                                      isDestructive: true,
+                                      icon: Icons.directions_car_outlined,
+                                      iconColor: const Color(0xFFEF4444),
                                     );
+
+                                     if (confirmed == true) {
+                                      final success = await ref
+                                          .read(profileControllerProvider.notifier)
+                                          .deleteUserCar(car.userCarId, currentUser.phoneNo);
+                                      if (!context.mounted) return;
+                                       if (success) {
+                                        AppSnackBar.showSuccess(context, 'ลบยานพาหนะสำเร็จ');
+                                       } else {
+                                        AppSnackBar.showError(context, 'ลบยานพาหนะไม่สำเร็จ กรุณาลองใหม่อีกครั้ง');
+                                      }
+                                    }
                                   },
                                 ),
                               ],

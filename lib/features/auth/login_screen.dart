@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:safeseat_mini/core/theme/app_theme.dart';
+import 'package:safeseat_mini/core/utils/app_feedback.dart';
 import 'package:safeseat_mini/core/utils/validators.dart';
 import 'package:safeseat_mini/features/auth/register_screen.dart';
 import 'package:safeseat_mini/features/main_layout/main_layout.dart';
@@ -38,24 +39,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       if (mounted) {
         if (errorMsg == null) {
           // Success
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text('เข้าสู่ระบบสำเร็จ')));
+          AppSnackBar.showSuccess(context, 'เข้าสู่ระบบสำเร็จ');
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(builder: (context) => const MainLayout()),
           );
         } else {
           // Error
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text(errorMsg)));
+          AppSnackBar.showError(context, errorMsg);
         }
       }
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('กรุณากรอกข้อมูลให้ถูกต้อง')),
-      );
+      AppSnackBar.showWarning(context, 'กรุณากรอกข้อมูลให้ถูกต้องครบถ้วน');
     }
   }
 

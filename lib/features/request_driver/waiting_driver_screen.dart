@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:safeseat_mini/core/theme/app_theme.dart';
+import 'package:safeseat_mini/core/utils/app_feedback.dart';
 import 'package:safeseat_mini/features/request_driver/controllers/request_driver_controller.dart';
 import 'package:safeseat_mini/features/request_driver/active_trip_screen.dart';
 import 'package:safeseat_mini/data/models/request_driver_model.dart';
@@ -85,11 +86,23 @@ class _WaitingDriverScreenState extends ConsumerState<WaitingDriverScreen> with 
 
   Future<void> _cancelRequest() async {
     if (_isCancelling) return;
-    if (mounted) {
-      setState(() {
-        _isCancelling = true;
-      });
-    }
+
+    final confirmed = await AppDialog.showConfirm(
+      context: context,
+      title: 'ยกเลิกการเรียกรถ',
+      message: 'คุณแน่ใจหรือไม่ว่าต้องการยกเลิกคำขอเรียกรถนี้?',
+      confirmText: 'ยกเลิกการเรียก',
+      cancelText: 'รอคนขับต่อ',
+      isDestructive: true,
+      icon: Icons.cancel_outlined,
+      iconColor: const Color(0xFFEF4444),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    setState(() {
+      _isCancelling = true;
+    });
 
     try {
       final success = await ref
@@ -100,18 +113,14 @@ class _WaitingDriverScreenState extends ConsumerState<WaitingDriverScreen> with 
 
       if (success) {
         _statusTimer?.cancel();
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('ยกเลิกรายการเรียกรถสำเร็จ')),
-        );
+        AppSnackBar.showSuccess(context, 'ยกเลิกรายการเรียกรถเรียบร้อยแล้ว');
         Navigator.of(context).pop(); // Go back to details
       } else {
         throw Exception('Failed to cancel request on server');
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('เกิดข้อผิดพลาดในการยกเลิก: $e')),
-        );
+        AppSnackBar.showError(context, 'เกิดข้อผิดพลาดในการยกเลิก: $e');
         setState(() {
           _isCancelling = false;
         });
@@ -126,113 +135,76 @@ class _WaitingDriverScreenState extends ConsumerState<WaitingDriverScreen> with 
         ? leader.licensePlate!
         : 'ไม่ระบุ';
 
-    showDialog(
+    AppDialog.showSuccess(
       context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(24),
+      title: 'พบคู่หูคนขับแล้ว!',
+      message: 'คนขับได้ทำการตอบรับงานของคุณเรียบร้อยแล้ว และกำลังเดินทางมาหาคุณ',
+      buttonText: 'ดูสถานะการเดินทาง',
+      customContent: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF8FAFC),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFE2E8F0)),
         ),
-        title: Row(
+        child: Column(
           children: [
-            const Icon(Icons.check_circle, color: Colors.green, size: 28),
-            const SizedBox(width: 8),
-            Text(
-              'พบคู่หูคนขับแล้ว!',
-              style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey[800]),
-            ),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'คนขับได้ทำการตอบรับงานของคุณเรียบร้อยแล้วและกำลังเดินทางมาหาคุณ',
-              style: TextStyle(fontSize: 14),
-            ),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.grey[50],
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.grey[100]!),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const Icon(Icons.person, color: Colors.grey, size: 20),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'คนขับหลัก: $leaderName',
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      const Icon(Icons.directions_car, color: Colors.grey, size: 20),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text('หมายเลขทะเบียนรถไล่ตาม: $licensePlate'),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          ElevatedButton(
-            onPressed: () {
-              final reqState = ref.read(requestDriverControllerProvider);
-              final request = _acceptedRequest;
-              // Prefer the server-confirmed coordinates from the accepted request,
-              // then fall back to controller state (never two identical defaults).
-              final pickupLatLng = request != null
-                  ? LatLng(request.pickupLatitude, request.pickupLongitude)
-                  : (reqState.pickupLatLng ?? const LatLng(18.8972, 99.0112));
-              final dropoffLatLng = request != null
-                  ? LatLng(request.dropoffLatitude, request.dropoffLongitude)
-                  : (reqState.dropoffLatLng ?? const LatLng(18.8972, 99.0112));
-
-              Navigator.of(dialogContext).pop(); // pop dialog
-              if (!mounted) return;
-
-              Navigator.of(context).pushAndRemoveUntil(
-                MaterialPageRoute(
-                  builder: (context) => ActiveTripScreen(
-                    requestId: widget.requestId,
-                    pickupAddress: widget.pickupAddress,
-                    dropoffAddress: widget.dropoffAddress,
-                    pickupLatLng: pickupLatLng,
-                    dropoffLatLng: dropoffLatLng,
-                    carDetails: widget.carDetails,
-                    price: widget.price,
-                    initialRequestData: _acceptedRequest,
+            Row(
+              children: [
+                const Icon(Icons.person_rounded, color: AppTheme.primaryColor, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'คนขับหลัก: $leaderName',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                   ),
                 ),
-                (route) => route.isFirst,
-              );
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.primaryColor,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
-              ),
+              ],
             ),
-            child: const Text('ตกลง'),
-          ),
-        ],
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                const Icon(Icons.directions_car_rounded, color: Color(0xFF64748B), size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'รถขับตาม: $licensePlate',
+                    style: const TextStyle(fontSize: 13, color: Color(0xFF475569)),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
+      onDismiss: () {
+        final reqState = ref.read(requestDriverControllerProvider);
+        final request = _acceptedRequest;
+        final pickupLatLng = request != null
+            ? LatLng(request.pickupLatitude, request.pickupLongitude)
+            : (reqState.pickupLatLng ?? const LatLng(18.8972, 99.0112));
+        final dropoffLatLng = request != null
+            ? LatLng(request.dropoffLatitude, request.dropoffLongitude)
+            : (reqState.dropoffLatLng ?? const LatLng(18.8972, 99.0112));
+
+        if (!mounted) return;
+
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(
+            builder: (context) => ActiveTripScreen(
+              requestId: widget.requestId,
+              pickupAddress: widget.pickupAddress,
+              dropoffAddress: widget.dropoffAddress,
+              pickupLatLng: pickupLatLng,
+              dropoffLatLng: dropoffLatLng,
+              carDetails: widget.carDetails,
+              price: widget.price,
+              initialRequestData: _acceptedRequest,
+            ),
+          ),
+          (route) => route.isFirst,
+        );
+      },
     );
   }
 

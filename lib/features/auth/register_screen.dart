@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:safeseat_mini/core/theme/app_theme.dart';
+import 'package:safeseat_mini/core/utils/app_feedback.dart';
 import 'package:safeseat_mini/core/utils/validators.dart';
 import 'package:safeseat_mini/features/auth/controllers/auth_controller.dart';
 
@@ -38,9 +39,13 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     if (!_formKey.currentState!.validate() ||
         _selectedGender == null ||
         !_acceptTerms) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('กรุณากรอกข้อมูลให้ถูกต้อง')),
-      );
+      if (_selectedGender == null) {
+        AppSnackBar.showWarning(context, 'กรุณาระบุเพศของคุณ');
+      } else if (!_acceptTerms) {
+        AppSnackBar.showWarning(context, 'กรุณายอมรับข้อกำหนดและนโยบายความเป็นส่วนตัว');
+      } else {
+        AppSnackBar.showWarning(context, 'กรุณากรอกข้อมูลให้ถูกต้องครบถ้วน');
+      }
       return;
     }
 
@@ -57,13 +62,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     if (mounted) {
       if (errorMsg == null) {
         Navigator.pop(context);
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('สร้างบัญชีสำเร็จ')));
+        AppSnackBar.showSuccess(context, 'สร้างบัญชีผู้ใช้สำเร็จ กรุณาเข้าสู่ระบบ');
       } else {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(errorMsg)));
+        AppSnackBar.showError(context, errorMsg);
       }
     }
   }

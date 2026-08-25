@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:safeseat_mini/core/theme/app_theme.dart';
 import 'package:safeseat_mini/core/controllers/user_controller.dart';
+import 'package:safeseat_mini/core/utils/app_feedback.dart';
 import 'package:safeseat_mini/core/utils/validators.dart';
 import 'package:safeseat_mini/features/profile/controllers/profile_controller.dart';
 
@@ -61,15 +62,16 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
 
   void _handleConfirmPayment(BuildContext context, double currentBalance) {
     if (!_formKey.currentState!.validate()) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('กรุณากรอกข้อมูลให้ถูกต้อง'),
-        ),
-      );
+      AppSnackBar.showWarning(context, 'กรุณากรอกจำนวนเงินให้ถูกต้อง');
       return;
     }
 
     final amount = _getFinalAmount();
+    if (amount <= 0) {
+      AppSnackBar.showWarning(context, 'กรุณาระบุจำนวนเงินที่ต้องการเติม');
+      return;
+    }
+
     _showQrCodeDialog(context, currentBalance, amount);
   }
 
@@ -282,14 +284,8 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
     final user = ref.read(userProvider);
     if (user == null) return;
 
-    // Show a loading indicator dialog
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => const Center(
-        child: CircularProgressIndicator(),
-      ),
-    );
+    // Show standardized loading dialog
+    AppDialog.showLoading(context, message: 'กำลังดำเนินการเติมเงิน...');
 
     final newBalance = currentBalance + amount;
     final updatedUser = user.copyWith(walletBalance: newBalance);
@@ -300,95 +296,32 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
           .editProfile(updatedUser);
 
       if (!context.mounted) return;
-      Navigator.of(context).pop(); // Dismiss loading dialog
+      AppDialog.hideLoading(context);
 
       if (success) {
-        // Show Success Dialog
-        showDialog(
+        // Show Standard Success Dialog
+        AppDialog.showSuccess(
           context: context,
-          builder: (BuildContext dialogContext) {
-            return AlertDialog(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const SizedBox(height: 16),
-                  const Icon(
-                    Icons.check_circle,
-                    color: Colors.green,
-                    size: 64,
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'เติมเงินสำเร็จ',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF1E293B),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'เติมเงินจำนวน ฿${amount.toStringAsFixed(2)} เรียบร้อยแล้ว',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 15,
-                      color: Colors.grey[600],
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 48,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.primaryColor,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      onPressed: () {
-                        Navigator.of(dialogContext).pop();
-                        // Reset inputs
-                        setState(() {
-                          _customAmountController.text = '200';
-                        });
-                      },
-                      child: const Text(
-                        'ตกลง',
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            );
+          title: 'เติมเงินสำเร็จ',
+          message: 'เติมเงินจำนวน ฿${amount.toStringAsFixed(2)} เข้ากระเป๋า SafeSeat Wallet เรียบร้อยแล้ว',
+          buttonText: 'ตกลง',
+          onDismiss: () {
+            if (mounted) {
+              setState(() {
+                _customAmountController.text = '200';
+              });
+            }
           },
         );
       } else {
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('เกิดข้อผิดพลาดในการบันทึกยอดเงินลงเซิร์ฟเวอร์'),
-              backgroundColor: Colors.red,
-            ),
-          );
+          AppSnackBar.showError(context, 'เกิดข้อผิดพลาดในการบันทึกยอดเงินลงเซิร์ฟเวอร์');
         }
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('เกิดข้อผิดพลาด: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        AppDialog.hideLoading(context);
+        AppSnackBar.showError(context, 'เกิดข้อผิดพลาด: $e');
       }
     }
   }

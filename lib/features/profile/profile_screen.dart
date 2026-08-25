@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:safeseat_mini/core/theme/app_theme.dart';
+import 'package:safeseat_mini/core/utils/app_feedback.dart';
 import 'package:safeseat_mini/features/profile/edit_profile_screen.dart';
 import 'package:safeseat_mini/core/controllers/user_controller.dart';
 import 'package:safeseat_mini/features/profile/wallet_screen.dart';
@@ -349,73 +350,26 @@ class ProfileScreen extends ConsumerWidget {
     );
   }
 
-  void _showLogoutDialog(BuildContext context, WidgetRef ref) {
-    showDialog(
+  void _showLogoutDialog(BuildContext context, WidgetRef ref) async {
+    final confirmed = await AppDialog.showConfirm(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
-        title: const Row(
-          children: [
-            Icon(Icons.logout, color: Colors.red, size: 24),
-            SizedBox(width: 8),
-            Text(
-              'ออกจากระบบ',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 18,
-              ),
-            ),
-          ],
-        ),
-        content: const Text(
-          'คุณแน่ใจหรือไม่ว่าต้องการออกจากระบบ?',
-          style: TextStyle(fontSize: 15, color: Color(0xFF475569)),
-        ),
-        actionsPadding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text(
-              'ยกเลิก',
-              style: TextStyle(
-                color: Color(0xFF64748B),
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.of(dialogContext).pop();
-              ref.read(userProvider.notifier).clearUser();
-              Navigator.of(context).pushAndRemoveUntil(
-                MaterialPageRoute(builder: (context) => const LoginScreen()),
-                (route) => false,
-              );
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('ออกจากระบบเรียบร้อยแล้ว'),
-                ),
-              );
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              elevation: 0,
-            ),
-            child: const Text(
-              'ออกจากระบบ',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-          ),
-        ],
-      ),
+      title: 'ออกจากระบบ',
+      message: 'คุณแน่ใจหรือไม่ว่าต้องการออกจากระบบบัญชีของคุณ?',
+      confirmText: 'ออกจากระบบ',
+      cancelText: 'ยกเลิก',
+      isDestructive: true,
+      icon: Icons.logout_rounded,
+      iconColor: const Color(0xFFEF4444),
     );
+
+    if (confirmed == true && context.mounted) {
+      ref.read(userProvider.notifier).clearUser();
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (context) => const LoginScreen()),
+        (route) => false,
+      );
+      AppSnackBar.showInfo(context, 'ออกจากระบบเรียบร้อยแล้ว');
+    }
   }
 
   Widget _buildMenuItem(IconData icon, String title) {

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:safeseat_mini/core/theme/app_theme.dart';
+import 'package:safeseat_mini/core/utils/app_feedback.dart';
 import 'package:safeseat_mini/core/utils/validators.dart';
 import 'package:safeseat_mini/data/models/request_driver_model.dart';
 import 'package:safeseat_mini/data/models/review_model.dart';
@@ -486,12 +487,9 @@ class _HistoryTripReviewScreenState extends ConsumerState<HistoryTripReviewScree
                 child: ElevatedButton.icon(
                   onPressed: () async {
                     if (_driverRating == 0 || _coDriverRating == 0) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content:
-                              Text('กรุณาเลือกคะแนนความพึงพอใจก่อนยืนยัน'),
-                          backgroundColor: Colors.red,
-                        ),
+                      AppSnackBar.showWarning(
+                        context,
+                        'กรุณาเลือกคะแนนความพึงพอใจให้ครบทั้งสองท่านก่อนยืนยัน',
                       );
                       return;
                     }
@@ -501,52 +499,37 @@ class _HistoryTripReviewScreenState extends ConsumerState<HistoryTripReviewScree
                     }
 
                     if (!context.mounted) return;
-                    // Show loading indicator
-                          showDialog(
-                            context: context,
-                            barrierDismissible: false,
-                            builder: (context) => const Center(
-                              child: CircularProgressIndicator(),
-                            ),
-                          );
+                    AppDialog.showLoading(context, message: 'กำลังบันทึกคะแนนรีวิว...');
 
-                          try {
-                            await ref.read(historyReviewControllerProvider.notifier).submitTripReviews(
-                              requestId: widget.trip.requestId,
-                              leaderUsername: widget.trip.leader?.username,
-                              leaderRating: _driverRating,
-                              leaderComment: _driverCommentController.text,
-                              followerUsername: widget.trip.follower?.username,
-                              followerRating: _coDriverRating,
-                              followerComment: _coDriverCommentController.text,
-                            );
+                    try {
+                      await ref.read(historyReviewControllerProvider.notifier).submitTripReviews(
+                        requestId: widget.trip.requestId,
+                        leaderUsername: widget.trip.leader?.username,
+                        leaderRating: _driverRating,
+                        leaderComment: _driverCommentController.text,
+                        followerUsername: widget.trip.follower?.username,
+                        followerRating: _coDriverRating,
+                        followerComment: _coDriverCommentController.text,
+                      );
 
-                            if (!context.mounted) return;
-                            // Hide loading indicator
-                            Navigator.of(context).pop();
+                      if (!context.mounted) return;
+                      AppDialog.hideLoading(context);
 
-                            // Show success message
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('ส่งรีวิวสำเร็จ ขอบคุณสำหรับความคิดเห็นของคุณ'),
-                                backgroundColor: Colors.green,
-                              ),
-                            );
-                            Navigator.of(context).pop();
-                          } catch (e) {
-                            if (!context.mounted) return;
-                            // Hide loading indicator
-                            Navigator.of(context).pop();
-                            
-                            // Show error message
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('เกิดข้อผิดพลาดในการส่งรีวิว: $e'),
-                                backgroundColor: Colors.red,
-                              ),
-                            );
-                          }
-                        },
+                      AppSnackBar.showSuccess(
+                        context,
+                        'ส่งรีวิวสำเร็จ ขอบคุณสำหรับความคิดเห็นของคุณ',
+                      );
+                      Navigator.of(context).pop();
+                    } catch (e) {
+                      if (!context.mounted) return;
+                      AppDialog.hideLoading(context);
+                      
+                      AppSnackBar.showError(
+                        context,
+                        'เกิดข้อผิดพลาดในการส่งรีวิว: $e',
+                      );
+                    }
+                  },
                   icon: const Icon(Icons.send_rounded, color: Colors.white),
                   label: const Text(
                     'ส่งรีวิว',

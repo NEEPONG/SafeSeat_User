@@ -8,6 +8,7 @@ import 'package:safeseat_mini/core/controllers/user_controller.dart';
 import 'package:safeseat_mini/data/models/car_model.dart';
 import 'package:safeseat_mini/core/theme/app_theme.dart';
 import 'package:safeseat_mini/core/services/route_service.dart';
+import 'package:safeseat_mini/core/utils/app_feedback.dart';
 import 'package:safeseat_mini/core/utils/validators.dart';
 import 'package:safeseat_mini/features/request_driver/payment_method_screen.dart';
 import 'package:safeseat_mini/features/request_driver/waiting_driver_screen.dart';
@@ -225,59 +226,22 @@ class _RequestDriverDetailsScreenState
   }
 
   void _showInsufficientBalanceDialog(num balance) {
-    showDialog(
+    AppDialog.showWarning(
       context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(24),
-        ),
-        title: const Row(
-          children: [
-            Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 28),
-            SizedBox(width: 8),
-            Text(
-              'ยอดเงินไม่เพียงพอ',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-          ],
-        ),
-        content: Text(
-          'ยอดเงินคงเหลือใน SafeSeat Wallet (฿${balance.toStringAsFixed(2)}) '
-          'ไม่เพียงพอสำหรับค่าบริการการเรียกรถครั้งนี้ (฿${_estimatedPrice.toStringAsFixed(0)})\n\n'
-          'กรุณาเปลี่ยนวิธีการชำระเงินเป็นเงินสด หรือเติมเงินเข้าสู่ Wallet ของคุณ',
-          style: const TextStyle(fontSize: 14),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('ยกเลิก'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              // Change to Cash payment directly
-              setState(() {
-                _paymentMethod = 'เงินสด';
-              });
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text(
-                    'เปลี่ยนช่องทางการชำระเงินเป็น เงินสด เรียบร้อยแล้ว',
-                  ),
-                ),
-              );
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.primaryColor,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
-              ),
-            ),
-            child: const Text('ใช้เงินสดแทน'),
-          ),
-        ],
-      ),
+      title: 'ยอดเงินไม่เพียงพอ',
+      message:
+          'ยอดเงินคงเหลือใน SafeSeat Wallet (฿${balance.toStringAsFixed(2)}) ไม่เพียงพอสำหรับค่าบริการครั้งนี้ (฿${_estimatedPrice.toStringAsFixed(0)})\n\nคุณต้องการเปลี่ยนวิธีการชำระเงินเป็นเงินสดหรือไม่?',
+      primaryButtonText: 'ใช้เงินสดแทน',
+      secondaryButtonText: 'ยกเลิก',
+      onPrimaryPressed: () {
+        setState(() {
+          _paymentMethod = 'เงินสด';
+        });
+        AppSnackBar.showSuccess(
+          context,
+          'เปลี่ยนช่องทางการชำระเงินเป็น เงินสด เรียบร้อยแล้ว',
+        );
+      },
     );
   }
 
@@ -1054,14 +1018,17 @@ class _RequestDriverDetailsScreenState
                                                 _selectedCar == null ||
                                                 reqState.pickupLatLng == null ||
                                                 reqState.dropoffLatLng == null) {
-                                              ScaffoldMessenger.of(context)
-                                                  .showSnackBar(
-                                                const SnackBar(
-                                                  content: Text(
-                                                    'กรุณากรอกข้อมูลให้ครบถ้วน',
-                                                  ),
-                                                ),
-                                              );
+                                              if (_selectedCar == null) {
+                                                AppSnackBar.showWarning(
+                                                  context,
+                                                  'กรุณาเลือกยานพาหนะที่จะให้คนขับขับก่อนทำรายการ',
+                                                );
+                                              } else {
+                                                AppSnackBar.showWarning(
+                                                  context,
+                                                  'กรุณากรอกข้อมูลและเลือกจุดรับ-ส่งให้ครบถ้วน',
+                                                );
+                                              }
                                               return;
                                             }
 
@@ -1137,25 +1104,17 @@ class _RequestDriverDetailsScreenState
                                                 }
                                               } else {
                                                 if (context.mounted) {
-                                                  ScaffoldMessenger.of(context)
-                                                      .showSnackBar(
-                                                    const SnackBar(
-                                                      content: Text(
-                                                        'ไม่สามารถบันทึกข้อมูลได้ กรุณาลองใหม่อีกครั้ง',
-                                                      ),
-                                                    ),
+                                                  AppSnackBar.showError(
+                                                    context,
+                                                    'ไม่สามารถสร้างคำขอได้ กรุณาลองใหม่อีกครั้ง',
                                                   );
                                                 }
                                               }
                                             } catch (e) {
                                               if (context.mounted) {
-                                                ScaffoldMessenger.of(context)
-                                                    .showSnackBar(
-                                                  const SnackBar(
-                                                    content: Text(
-                                                      'ไม่สามารถบันทึกข้อมูลได้ กรุณาลองใหม่อีกครั้ง',
-                                                    ),
-                                                  ),
+                                                AppSnackBar.showError(
+                                                  context,
+                                                  'เกิดข้อผิดพลาดในการสร้างคำขอ: $e',
                                                 );
                                               }
                                             } finally {

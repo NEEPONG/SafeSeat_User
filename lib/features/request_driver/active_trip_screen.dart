@@ -5,6 +5,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:safeseat_mini/core/theme/app_theme.dart';
+import 'package:safeseat_mini/core/utils/app_feedback.dart';
 import 'package:safeseat_mini/features/request_driver/controllers/request_driver_controller.dart';
 import 'package:safeseat_mini/features/profile/controllers/profile_controller.dart';
 import 'package:safeseat_mini/core/controllers/user_controller.dart';
@@ -272,64 +273,91 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
 
   void _showCallDialog(String role, String name, String? phoneNo) {
     if (phoneNo == null || phoneNo.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('ไม่มีเบอร์โทรศัพท์สำหรับคนขับคนนี้')),
-      );
+      AppSnackBar.showWarning(context, 'ไม่มีข้อมูลเบอร์โทรศัพท์สำหรับคนขับคนนี้');
       return;
     }
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(24),
         ),
-        title: Text(
-          'ติดต่อ$role',
-          style: const TextStyle(fontWeight: FontWeight.bold),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppTheme.primaryColor.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.phone_in_talk_rounded,
+                color: AppTheme.primaryColor,
+                size: 22,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Text(
+              'ติดต่อ$role',
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+            ),
+          ],
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('คนขับ: $name', style: const TextStyle(fontSize: 16)),
-            const SizedBox(height: 8),
+            Text('คนขับ: $name', style: const TextStyle(fontSize: 15, color: Color(0xFF334155))),
+            const SizedBox(height: 6),
             Text('เบอร์โทรศัพท์: $phoneNo', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.primaryColor)),
           ],
         ),
         actions: [
-          TextButton(
-            onPressed: () {
-              Clipboard.setData(ClipboardData(text: phoneNo));
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('คัดลอกเบอร์โทรศัพท์เรียบร้อยแล้ว')),
-              );
-              Navigator.of(context).pop();
-            },
-            child: const Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.copy, size: 18),
-                SizedBox(width: 4),
-                Text('คัดลอกเบอร์'),
-              ],
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('กำลังจำลองสายโทรไปที่ $phoneNo...')),
-              );
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.primaryColor,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    Clipboard.setData(ClipboardData(text: phoneNo));
+                    AppSnackBar.showSuccess(context, 'คัดลอกเบอร์โทรศัพท์เรียบร้อยแล้ว');
+                    Navigator.of(dialogContext).pop();
+                  },
+                  icon: const Icon(Icons.copy_rounded, size: 16),
+                  label: const Text('คัดลอก'),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    foregroundColor: const Color(0xFF475569),
+                    side: const BorderSide(color: Color(0xFFCBD5E1)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                ),
               ),
-            ),
-            child: const Text('โทรออก'),
+              const SizedBox(width: 10),
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.of(dialogContext).pop();
+                    AppSnackBar.showInfo(context, 'กำลังจำลองสายโทรไปที่ $phoneNo...');
+                  },
+                  icon: const Icon(Icons.phone_rounded, size: 16),
+                  label: const Text('โทรออก'),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    backgroundColor: AppTheme.primaryColor,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -341,9 +369,7 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
 
     // Auto-copy the link to the clipboard so the user can paste it anywhere
     Clipboard.setData(ClipboardData(text: shareUrl));
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('คัดลอกลิงก์ติดตามการเดินทางแล้ว')),
-    );
+    AppSnackBar.showSuccess(context, 'คัดลอกลิงก์ติดตามการเดินทางเรียบร้อยแล้ว');
 
     Share.share(
       'ฉันกำลังเดินทางด้วย SafeSeat! คุณสามารถติดตามพิกัดสดและสถานะการเดินทางของฉันได้ที่นี่: $shareUrl',

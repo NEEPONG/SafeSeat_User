@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:safeseat_mini/core/utils/app_feedback.dart';
 import 'package:safeseat_mini/core/utils/validators.dart';
 import 'package:safeseat_mini/data/models/request_driver_model.dart';
 import 'package:safeseat_mini/features/history/controllers/history_controller.dart';
@@ -56,9 +57,7 @@ class _HistoryTripReportScreenState extends ConsumerState<HistoryTripReportScree
 
   Future<void> _pickImage() async {
     if (_selectedImages.length >= 5) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('คุณสามารถอัปโหลดรูปภาพได้สูงสุด 5 รูปภาพ')),
-      );
+      AppSnackBar.showWarning(context, 'คุณสามารถอัปโหลดรูปภาพหลักฐานได้สูงสุด 5 รูปภาพ');
       return;
     }
 
@@ -74,8 +73,9 @@ class _HistoryTripReportScreenState extends ConsumerState<HistoryTripReportScree
             !path.endsWith('.jpg') &&
             !path.endsWith('.jpeg')) {
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('กรุณากรอกข้อมูลให้ครบถ้วน')),
+            AppSnackBar.showWarning(
+              context,
+              'รองรับเฉพาะไฟล์รูปภาพนามสกุล .png, .jpg, .jpeg เท่านั้น',
             );
           }
           return;
@@ -98,20 +98,15 @@ class _HistoryTripReportScreenState extends ConsumerState<HistoryTripReportScree
 
   Future<void> _submitReport() async {
     if (_selectedCategory == null || !_formKey.currentState!.validate()) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('กรุณากรอกข้อมูลให้ครบถ้วน')),
+      AppSnackBar.showWarning(
+        context,
+        'กรุณาเลือกประเภทปัญหาและกรอกรายละเอียดให้ถูกต้องครบถ้วน',
       );
       return;
     }
 
-    // Show loading indicator
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => const Center(
-        child: CircularProgressIndicator(),
-      ),
-    );
+    // Show standardized loading indicator
+    AppDialog.showLoading(context, message: 'กำลังส่งข้อมูลรายงานและอัปโหลดหลักฐาน...');
 
     try {
       // 1. Prepare report index based on selected category
@@ -159,96 +154,32 @@ class _HistoryTripReportScreenState extends ConsumerState<HistoryTripReportScree
       );
 
       if (!mounted) return;
-      Navigator.of(context).pop(); // pop loading indicator
+      AppDialog.hideLoading(context);
 
       if (success) {
         // Show success dialog
-        showDialog(
+        AppDialog.showSuccess(
           context: context,
-          barrierDismissible: false,
-          builder: (context) => AlertDialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(24),
-            ),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const SizedBox(height: 16),
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.green[50],
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.check_circle_rounded,
-                    color: Colors.green,
-                    size: 54,
-                  ),
-                ),
-                const SizedBox(height: 20),
-                const Text(
-                  'ส่งรายงานสำเร็จ',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF0F172A),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                const Text(
-                  'ระบบได้รับข้อมูลรายงานความไม่สะดวกของคุณแล้ว ทางเจ้าหน้าที่จะรีบทำการตรวจสอบเหตุการณ์และดำเนินการต่อไปโดยเร็วที่สุด',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Color(0xFF64748B),
-                    height: 1.5,
-                  ),
-                ),
-                const SizedBox(height: 24),
-                SizedBox(
-                  width: double.infinity,
-                  height: 48,
-                  child: ElevatedButton(
-                    onPressed: () {
-                      Navigator.of(context).pop(); // pop dialog
-                      Navigator.of(context).pop(); // pop report screen
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF0D47A1),
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      elevation: 0,
-                    ),
-                    child: const Text(
-                      'ตกลง',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
+          title: 'ส่งรายงานสำเร็จ',
+          message:
+              'ระบบได้รับข้อมูลรายงานความไม่สะดวกของคุณแล้ว ทางเจ้าหน้าที่จะรีบทำการตรวจสอบเหตุการณ์และดำเนินการต่อไปโดยเร็วที่สุด',
+          buttonText: 'ตกลง',
+          onDismiss: () {
+            if (mounted) {
+              Navigator.of(context).pop(); // pop report screen
+            }
+          },
         );
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('ส่งรายงานไม่สำเร็จ กรุณาลองใหม่อีกครั้ง'),
-            backgroundColor: Colors.red,
-          ),
+        AppSnackBar.showError(
+          context,
+          'ส่งรายงานไม่สำเร็จ กรุณาลองใหม่อีกครั้ง',
         );
       }
     } catch (e) {
       if (mounted) {
-        Navigator.of(context).pop(); // pop loading indicator
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('เกิดข้อผิดพลาด: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        AppDialog.hideLoading(context);
+        AppSnackBar.showError(context, 'เกิดข้อผิดพลาด: $e');
       }
     }
   }

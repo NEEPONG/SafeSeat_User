@@ -9,6 +9,7 @@ import 'package:safeseat_mini/features/request_driver/controllers/request_driver
 import 'package:safeseat_mini/core/constants/api_constants.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:safeseat_mini/core/theme/app_theme.dart';
+import 'package:safeseat_mini/core/utils/app_feedback.dart';
 
 class SelectLocationScreen extends ConsumerStatefulWidget {
   final bool isPickup;
@@ -181,9 +182,7 @@ class _SelectLocationScreenState extends ConsumerState<SelectLocationScreen> {
     serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('กรุณาเปิดบริการระบุตำแหน่ง (GPS)')),
-        );
+        AppSnackBar.showWarning(context, 'กรุณาเปิดบริการระบุตำแหน่ง (GPS)');
       }
       return;
     }
@@ -193,9 +192,7 @@ class _SelectLocationScreenState extends ConsumerState<SelectLocationScreen> {
       permission = await Geolocator.requestPermission();
       if (permission == LocationPermission.denied) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('สิทธิ์การเข้าถึงตำแหน่งถูกปฏิเสธ')),
-          );
+          AppSnackBar.showWarning(context, 'สิทธิ์การเข้าถึงตำแหน่งถูกปฏิเสธ');
         }
         return;
       }
@@ -203,10 +200,9 @@ class _SelectLocationScreenState extends ConsumerState<SelectLocationScreen> {
     
     if (permission == LocationPermission.deniedForever) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('สิทธิ์การระบุตำแหน่งถูกปฏิเสธอย่างถาวร กรุณาเปิดสิทธิ์ในการตั้งค่าของอุปกรณ์'),
-          ),
+        AppSnackBar.showError(
+          context,
+          'สิทธิ์การระบุตำแหน่งถูกปฏิเสธอย่างถาวร กรุณาเปิดสิทธิ์ในการตั้งค่าของอุปกรณ์',
         );
       }
       return;
@@ -235,9 +231,7 @@ class _SelectLocationScreenState extends ConsumerState<SelectLocationScreen> {
       await _reverseGeocode(latLng);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('ไม่สามารถดึงตำแหน่งปัจจุบันได้: $e')),
-        );
+        AppSnackBar.showError(context, 'ไม่สามารถดึงตำแหน่งปัจจุบันได้: $e');
       }
     } finally {
       if (mounted) {
