@@ -71,8 +71,14 @@ class RequestDriverRepository {
   Future<List<RequestDriverModel>> getRequestsByUser({
     required String userId,
     required String type,
+    int? page,
+    int? limit,
   }) async {
-    final url = Uri.parse('${ApiConstants.baseUrl}/api/user/request/user/$userId?type=$type');
+    String queryParams = 'type=$type';
+    if (page != null) queryParams += '&page=$page';
+    if (limit != null) queryParams += '&limit=$limit';
+
+    final url = Uri.parse('${ApiConstants.baseUrl}/api/user/request/user/$userId?$queryParams');
     final response = await http.get(url, headers: {'Content-Type': 'application/json'});
 
     if (response.statusCode == 200) {

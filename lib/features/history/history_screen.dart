@@ -20,6 +20,7 @@ class HistoryScreen extends ConsumerStatefulWidget {
 
 class _HistoryScreenState extends ConsumerState<HistoryScreen> {
   int _selectedTab = 0; // 0: กำลังดำเนินการ, 1: สำเร็จ, 2: ยกเลิกแล้ว, 3: รายงาน
+  int _displayedCount = 5;
 
   final List<String> _tabs = [
     'กำลังดำเนินการ',
@@ -90,22 +91,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
 
                 // Selected Tab Content
                 _buildTabContent(),
-                const SizedBox(height: 28),
-
-                // Recommendation Header
-                const Text(
-                  'คุณอาจชอบสิ่งเหล่านี้',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF0F172A),
-                  ),
-                ),
-                const SizedBox(height: 16),
-
-                // Recommendation Items
-                _buildRecommendations(),
-                const SizedBox(height: 16),
+                const SizedBox(height: 20),
               ],
             ),
           ),
@@ -138,6 +124,7 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
               onTap: () {
                 setState(() {
                   _selectedTab = idx;
+                  _displayedCount = 5;
                 });
               },
               child: Container(
@@ -203,195 +190,212 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
             );
           }
 
-          return ListView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: reports.length,
-            itemBuilder: (context, index) {
-              final report = reports[index];
-              final dateStr = report.reportDate != null
-                  ? '${report.reportDate!.day}/${report.reportDate!.month}/${report.reportDate!.year} • ${report.reportDate!.hour.toString().padLeft(2, '0')}:${report.reportDate!.minute.toString().padLeft(2, '0')}'
-                  : '';
-              
-              final statusColor = report.reportStatus == 'กำลังดำเนินการ'
-                  ? const Color(0xFFF97316)
-                  : const Color(0xFF10B981);
+          final visibleReports = reports.take(_displayedCount).toList();
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              ListView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: visibleReports.length,
+                itemBuilder: (context, index) {
+                  final report = visibleReports[index];
+                  final dateStr = report.reportDate != null
+                      ? '${report.reportDate!.day}/${report.reportDate!.month}/${report.reportDate!.year} • ${report.reportDate!.hour.toString().padLeft(2, '0')}:${report.reportDate!.minute.toString().padLeft(2, '0')}'
+                      : '';
                   
-              final statusBgColor = report.reportStatus == 'กำลังดำเนินการ'
-                  ? const Color(0xFFFFF7ED)
-                  : const Color(0xFFECFDF5);
+                  final statusColor = report.reportStatus == 'กำลังดำเนินการ'
+                      ? const Color(0xFFF97316)
+                      : const Color(0xFF10B981);
+                      
+                  final statusBgColor = report.reportStatus == 'กำลังดำเนินการ'
+                      ? const Color(0xFFFFF7ED)
+                      : const Color(0xFFECFDF5);
 
-              // Extract reported driver info and clean detail
-              final rawDetail = report.reportDetail ?? '';
-              final idMatch = RegExp(r'\[ID:\s*([^\]]+)\]', caseSensitive: false).firstMatch(rawDetail);
-              final List<String> reportedIds = idMatch != null && idMatch.group(1) != null
-                  ? idMatch.group(1)!.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList()
-                  : [];
-              final cleanDetail = rawDetail
-                  .replaceAll(RegExp(r'\[ID:\s*[^\]]+\]\s*', caseSensitive: false), '')
-                  .replaceAll(RegExp(r'\[เป้าหมาย:\s*[^\]]+\]\s*', caseSensitive: false), '')
-                  .trim();
+                  // Extract reported driver info and clean detail
+                  final rawDetail = report.reportDetail ?? '';
+                  final idMatch = RegExp(r'\[ID:\s*([^\]]+)\]', caseSensitive: false).firstMatch(rawDetail);
+                  final List<String> reportedIds = idMatch != null && idMatch.group(1) != null
+                      ? idMatch.group(1)!.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList()
+                      : [];
+                  final cleanDetail = rawDetail
+                      .replaceAll(RegExp(r'\[ID:\s*[^\]]+\]\s*', caseSensitive: false), '')
+                      .replaceAll(RegExp(r'\[เป้าหมาย:\s*[^\]]+\]\s*', caseSensitive: false), '')
+                      .trim();
 
-              String driverInfo = 'ไม่มีข้อมูลคนขับ';
-              final req = report.requestByUser;
-              if (req != null) {
-                final leader = req['leader'];
-                final follower = req['follower'];
-                final List<String> drivers = [];
+                  String driverInfo = 'ไม่มีข้อมูลคนขับ';
+                  final req = report.requestByUser;
+                  if (req != null) {
+                    final leader = req['leader'];
+                    final follower = req['follower'];
+                    final List<String> drivers = [];
 
-                if (reportedIds.isNotEmpty) {
-                  if (leader != null && reportedIds.contains(leader['username'])) {
-                    drivers.add('คนขับหลัก: ${leader['firstname']} ${leader['lastname']}');
+                    if (reportedIds.isNotEmpty) {
+                      if (leader != null && reportedIds.contains(leader['username'])) {
+                        drivers.add('คนขับหลัก: ${leader['firstname']} ${leader['lastname']}');
+                      }
+                      if (follower != null && reportedIds.contains(follower['username'])) {
+                        drivers.add('ผู้ช่วยคนขับ: ${follower['firstname']} ${follower['lastname']}');
+                      }
+                    } else {
+                      if (leader != null) {
+                        drivers.add('คนขับหลัก: ${leader['firstname']} ${leader['lastname']}');
+                      }
+                      if (follower != null) {
+                        drivers.add('ผู้ช่วยคนขับ: ${follower['firstname']} ${follower['lastname']}');
+                      }
+                    }
+
+                    if (drivers.isNotEmpty) {
+                      driverInfo = drivers.join('\n');
+                    }
                   }
-                  if (follower != null && reportedIds.contains(follower['username'])) {
-                    drivers.add('ผู้ช่วยคนขับ: ${follower['firstname']} ${follower['lastname']}');
-                  }
-                }
 
-                if (drivers.isEmpty) {
-                  if (leader != null) {
-                    drivers.add('คนขับหลัก: ${leader['firstname']} ${leader['lastname']}');
-                  }
-                  if (follower != null) {
-                    drivers.add('ผู้ช่วยคนขับ: ${follower['firstname']} ${follower['lastname']}');
-                  }
-                }
+                  final firstImageUrl = (report.reportImagePath != null && report.reportImagePath!.isNotEmpty)
+                      ? Supabase.instance.client.storage.from('images').getPublicUrl(report.reportImagePath!.split(',').first)
+                      : null;
 
-                if (drivers.isNotEmpty) {
-                  driverInfo = drivers.join('\n');
-                }
-              }
-
-              if (driverInfo == 'ไม่มีข้อมูลคนขับ' && reportedIds.isNotEmpty) {
-                driverInfo = 'ผู้ถูกรายงาน: @${reportedIds.join(', @')}';
-              }
-
-              // Parse image thumbnail path if exists
-              String? firstImageUrl;
-              if (report.reportImagePath != null && report.reportImagePath!.isNotEmpty) {
-                final paths = report.reportImagePath!.split(',').where((p) => p.trim().isNotEmpty).toList();
-                if (paths.isNotEmpty) {
-                  firstImageUrl = Supabase.instance.client.storage.from('images').getPublicUrl(paths.first);
-                }
-              }
-
-              return Container(
-                margin: const EdgeInsets.only(bottom: 16),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: const Color(0xFFF1F5F9)),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.02),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.02),
+                          blurRadius: 6,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-                child: InkWell(
-                  onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (context) => HistoryReportDetailsScreen(report: report),
-                      ),
-                    );
-                  },
-                  borderRadius: BorderRadius.circular(20),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(16),
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (context) => HistoryReportDetailsScreen(report: report),
+                          ),
+                        );
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                    decoration: BoxDecoration(
-                                      color: statusBgColor,
-                                      borderRadius: BorderRadius.circular(12),
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: statusBgColor,
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                        child: Text(
+                                          report.reportStatus ?? 'กำลังดำเนินการ',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                            color: statusColor,
+                                          ),
+                                        ),
+                                      ),
+                                      Text(
+                                        dateStr,
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          color: Color(0xFF64748B),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    report.reportType,
+                                    style: const TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFF0F172A),
                                     ),
-                                    child: Text(
-                                      report.reportStatus ?? 'กำลังดำเนินการ',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.bold,
-                                        color: statusColor,
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    driverInfo,
+                                    style: const TextStyle(
+                                      fontSize: 13,
+                                      color: Color(0xFF475569),
+                                      height: 1.4,
+                                    ),
+                                  ),
+                                  if (cleanDetail.isNotEmpty) ...[
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      cleanDetail,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        color: Color(0xFF94A3B8),
                                       ),
                                     ),
-                                  ),
-                                  Text(
-                                    dateStr,
-                                    style: const TextStyle(
-                                      fontSize: 12,
-                                      color: Color(0xFF64748B),
-                                    ),
-                                  ),
+                                  ],
                                 ],
                               ),
-                              const SizedBox(height: 12),
-                              Text(
-                                report.reportType,
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFF0F172A),
+                            ),
+                            if (firstImageUrl != null) ...[
+                              const SizedBox(width: 16),
+                              Container(
+                                width: 60,
+                                height: 60,
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: const Color(0xFFE2E8F0)),
                                 ),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                driverInfo,
-                                style: const TextStyle(
-                                  fontSize: 13,
-                                  color: Color(0xFF475569),
-                                  height: 1.4,
-                                ),
-                              ),
-                              if (cleanDetail.isNotEmpty) ...[
-                                const SizedBox(height: 8),
-                                Text(
-                                  cleanDetail,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    color: Color(0xFF94A3B8),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(11),
+                                  child: Image.network(
+                                    firstImageUrl,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (context, error, stackTrace) => const Icon(Icons.broken_image, size: 24),
                                   ),
                                 ),
-                              ],
-                            ],
-                          ),
-                        ),
-                        if (firstImageUrl != null) ...[
-                          const SizedBox(width: 16),
-                          Container(
-                            width: 60,
-                            height: 60,
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: const Color(0xFFE2E8F0)),
-                            ),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(11),
-                              child: Image.network(
-                                firstImageUrl,
-                                fit: BoxFit.cover,
-                                errorBuilder: (context, error, stackTrace) => const Icon(Icons.broken_image, size: 24),
                               ),
-                            ),
-                          ),
-                        ],
-                      ],
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+              if (reports.length > _displayedCount) ...[
+                const SizedBox(height: 16),
+                Center(
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      setState(() {
+                        _displayedCount += 5;
+                      });
+                    },
+                    icon: const Icon(Icons.expand_more_rounded, size: 20),
+                    label: Text('โหลดรายงานเพิ่มเติม (แสดงแล้ว ${visibleReports.length} จาก ${reports.length})'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppTheme.primaryColor,
+                      side: const BorderSide(color: Color(0xFF93C5FD)),
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      backgroundColor: const Color(0xFFEFF6FF),
                     ),
                   ),
                 ),
-              );
-            },
+              ],
+            ],
           );
         },
         loading: () => const Center(
@@ -454,14 +458,19 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
           );
         }
 
-        // Return list of trip cards
-        return ListView.separated(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: trips.length,
-          separatorBuilder: (context, index) => const SizedBox(height: 16),
-          itemBuilder: (context, index) {
-            final trip = trips[index];
+        final visibleTrips = trips.take(_displayedCount).toList();
+
+        // Return list of trip cards with pagination
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: visibleTrips.length,
+              separatorBuilder: (context, index) => const SizedBox(height: 16),
+              itemBuilder: (context, index) {
+                final trip = visibleTrips[index];
             
             // Map status info
             Color statusColor = const Color(0xFF3B82F6);
@@ -556,7 +565,30 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
               },
             );
           },
-        );
+        ),
+        if (trips.length > _displayedCount) ...[
+          const SizedBox(height: 16),
+          Center(
+            child: OutlinedButton.icon(
+              onPressed: () {
+                setState(() {
+                  _displayedCount += 5;
+                });
+              },
+              icon: const Icon(Icons.expand_more_rounded, size: 20),
+              label: Text('โหลดประวัติเพิ่มเติม (แสดงแล้ว ${visibleTrips.length} จาก ${trips.length})'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppTheme.primaryColor,
+                side: const BorderSide(color: Color(0xFF93C5FD)),
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                backgroundColor: const Color(0xFFEFF6FF),
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
       },
       loading: () => const Center(
         child: Padding(
@@ -915,131 +947,6 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildRecommendations() {
-    return Column(
-      children: [
-        // Grid of two side by side cards
-        Row(
-          children: [
-            Expanded(
-              child: _buildImageCard(
-                imageUrl: 'https://images.unsplash.com/photo-1540962351504-03099e0a754b?w=400',
-                title: 'SafeSeat Pro',
-                subtitle: 'เดินทางอย่างมั่นใจ',
-                height: 180,
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: _buildImageCard(
-                imageUrl: 'https://images.unsplash.com/photo-1524522173746-f628baad3644?w=400',
-                title: 'Smart Tracking',
-                subtitle: 'ติดตามได้ทุกที่',
-                height: 180,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
-        // Large full-width banner
-        _buildImageCard(
-          imageUrl: 'https://images.unsplash.com/photo-1506157786151-b8491531f063?w=800',
-          title: 'ส่วนลดพิเศษ 20%',
-          subtitle: 'สำหรับการเดินทางครั้งต่อไปของคุณ',
-          height: 140,
-        ),
-      ],
-    );
-  }
-
-  Widget _buildImageCard({
-    required String imageUrl,
-    required String title,
-    required String subtitle,
-    required double height,
-  }) {
-    return Container(
-      height: height,
-      width: double.infinity,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child: Stack(
-          children: [
-            // Image
-            Positioned.fill(
-              child: Image.network(
-                imageUrl,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) {
-                  return Container(
-                    color: const Color(0xFFE2E8F0),
-                    child: const Icon(
-                      Icons.image,
-                      color: Colors.grey,
-                      size: 40,
-                    ),
-                  );
-                },
-              ),
-            ),
-            // Gradient Overlay
-            Positioned.fill(
-              child: Container(
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      Colors.transparent,
-                      Colors.black87,
-                    ],
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                  ),
-                ),
-              ),
-            ),
-            // Text Overlays
-            Positioned(
-              left: 16,
-              right: 16,
-              bottom: 16,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    subtitle,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: Colors.white70,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

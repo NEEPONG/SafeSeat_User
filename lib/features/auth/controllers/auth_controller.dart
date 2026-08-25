@@ -2,6 +2,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:safeseat_mini/data/repositories/auth_repository.dart';
 import 'package:safeseat_mini/core/controllers/user_controller.dart';
 
+import 'package:safeseat_mini/data/models/car_model.dart';
+
 class AuthController extends Notifier<bool> {
   @override
   bool build() {
@@ -27,17 +29,25 @@ class AuthController extends Notifier<bool> {
     }
   }
 
-  Future<String?> register(
-    String phone,
-    String name,
-    int gender,
-    String email,
-    String password,
-  ) async {
+  Future<String?> register({
+    required String phone,
+    required String name,
+    required int gender,
+    required String email,
+    required String password,
+    CarModel? car,
+  }) async {
     state = true;
     try {
       final repository = ref.read(authRepositoryProvider);
-      await repository.register(phone, name, gender, email, password);
+      await repository.register(
+        phone: phone,
+        name: name,
+        gender: gender,
+        email: email,
+        password: password,
+        car: car,
+      );
       
       state = false;
       return null; // Null means success
