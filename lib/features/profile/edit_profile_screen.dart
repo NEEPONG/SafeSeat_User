@@ -177,7 +177,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                                 vertical: 14,
                               ),
                             ),
-                            hint: const Text('ประเภทรถ'),
+                            hint: const Text('ชนิดเกียร์ / ระบบส่งกำลัง (Auto, Manual, EV)'),
                             initialValue: selectedCarType,
                             items: carTypes.map((type) {
                               return DropdownMenuItem(

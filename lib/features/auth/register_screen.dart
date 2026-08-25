@@ -57,7 +57,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       if (_selectedGender == null) {
         AppSnackBar.showWarning(context, 'กรุณาระบุเพศของคุณ');
       } else if (_selectedCarType == null) {
-        AppSnackBar.showWarning(context, 'กรุณาเลือกประเภทรถยนต์ของคุณ');
+        AppSnackBar.showWarning(context, 'กรุณาเลือกระบบส่งกำลัง / ชนิดเกียร์ของรถ (Auto / Manual / EV)');
       } else if (!_acceptTerms) {
         AppSnackBar.showWarning(context, 'กรุณายอมรับข้อกำหนดและนโยบายความเป็นส่วนตัว');
       } else {
@@ -273,7 +273,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(
-                  Icons.category_outlined,
+                  Icons.tune_outlined,
                   color: AppTheme.primaryColor,
                   size: 18,
                 ),
@@ -284,7 +284,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                   child: DropdownButton<int>(
                     isExpanded: true,
                     hint: const Text(
-                      'เลือกประเภทรถยนต์ (เช่น รถเก๋ง, รถกระบะ, SUV)',
+                      'เลือกระบบส่งกำลัง / ชนิดเกียร์ (Auto, Manual, EV)',
                       style: TextStyle(color: Color(0xFF94A3B8), fontSize: 14),
                     ),
                     icon: const Padding(
