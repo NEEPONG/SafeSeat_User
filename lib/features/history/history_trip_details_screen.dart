@@ -81,13 +81,17 @@ class _HistoryTripDetailsScreenState extends ConsumerState<HistoryTripDetailsScr
     final leaderName = trip.leader != null 
         ? '${trip.leader!.firstname} ${trip.leader!.lastname}'
         : '';
-    final leaderSubtitle = trip.leader != null ? 'Driver Your Car' : '';
+    final leaderSubtitle = trip.leader != null ? 'คนขับหลัก • ขับรถให้คุณ' : '';
     
     // Follower info check
     final followerName = trip.follower != null
         ? '${trip.follower!.firstname} ${trip.follower!.lastname}'
         : '';
-    final followerSubtitle = trip.follower != null ? 'Driver1 Follower' : '';
+    final followerSubtitle = trip.follower != null
+        ? (trip.follower!.vehicleSummary != 'ไม่ระบุยานพาหนะ'
+            ? 'ขับตาม: ${trip.follower!.vehicleSummary}'
+            : 'คนขับผู้ช่วย (ขับตาม)')
+        : '';
 
     final bool hasDrivers = trip.leader != null && trip.requestStatus != 'ยกเลิก';
     final int driverCount = (trip.leader != null ? 1 : 0) + (trip.follower != null ? 1 : 0);

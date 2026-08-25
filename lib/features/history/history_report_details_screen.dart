@@ -155,10 +155,10 @@ class _HistoryReportDetailsScreenState extends State<HistoryReportDetailsScreen>
       final List<ReportedDriverInfo> drivers = [];
 
       if (targetUsernames.isNotEmpty) {
-        // Query driver records
+        // Query driver records with vehicle details
         final driverRows = await Supabase.instance.client
             .from('driver')
-            .select('username, firstname, lastname, phoneno, regisimagepath, drivercar:driver_car(carplate)')
+            .select('username, firstname, lastname, phoneno, regisimagepath, drivercar:driver_car(carbrand, carmodel, carplate)')
             .inFilter('username', targetUsernames);
 
         // Query reviews to calculate driver rating
@@ -205,9 +205,22 @@ class _HistoryReportDetailsScreenState extends State<HistoryReportDetailsScreen>
             final ratingVal = driverRatings[uLower];
             final ratingStr = ratingVal != null ? ratingVal.toStringAsFixed(1) : '5.0';
 
-            String? carPlate;
+            String? carVehicle;
             if (row['drivercar'] != null && row['drivercar'] is Map) {
-              carPlate = row['drivercar']['carplate']?.toString();
+              final brand = row['drivercar']['carbrand']?.toString();
+              final model = row['drivercar']['carmodel']?.toString();
+              final plate = row['drivercar']['carplate']?.toString();
+              final parts = <String>[];
+              if (brand != null && brand.trim().isNotEmpty) parts.add(brand.trim());
+              if (model != null && model.trim().isNotEmpty) parts.add(model.trim());
+              final modelStr = parts.join(' ');
+              if (modelStr.isNotEmpty && plate != null && plate.trim().isNotEmpty) {
+                carVehicle = '$modelStr • $plate';
+              } else if (modelStr.isNotEmpty) {
+                carVehicle = modelStr;
+              } else {
+                carVehicle = plate;
+              }
             }
 
             drivers.add(ReportedDriverInfo(
@@ -215,7 +228,7 @@ class _HistoryReportDetailsScreenState extends State<HistoryReportDetailsScreen>
               fullname: '${row['firstname'] ?? ''} ${row['lastname'] ?? ''}'.trim(),
               role: role,
               phoneNo: row['phoneno']?.toString(),
-              licensePlate: carPlate,
+              licensePlate: carVehicle,
               imageUrl: _getDriverProfileImageUrl(row['regisimagepath']),
               rating: ratingStr,
             ));

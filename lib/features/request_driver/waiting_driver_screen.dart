@@ -130,10 +130,9 @@ class _WaitingDriverScreenState extends ConsumerState<WaitingDriverScreen> with 
 
   void _showSuccessDialog() {
     final leader = _acceptedRequest?.leader;
+    final follower = _acceptedRequest?.follower;
     final leaderName = leader != null ? '${leader.firstname} ${leader.lastname}' : 'คนขับของ SafeSeat';
-    final licensePlate = leader != null && leader.licensePlate != null
-        ? leader.licensePlate!
-        : 'ไม่ระบุ';
+    final followerVehicle = follower?.vehicleSummary ?? (leader?.licensePlate != null ? 'ทะเบียน ${leader!.licensePlate}' : 'ไม่ระบุ');
 
     AppDialog.showSuccess(
       context: context,
@@ -168,7 +167,7 @@ class _WaitingDriverScreenState extends ConsumerState<WaitingDriverScreen> with 
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'รถขับตาม: $licensePlate',
+                    'รถขับตาม: $followerVehicle',
                     style: const TextStyle(fontSize: 13, color: Color(0xFF475569)),
                   ),
                 ),

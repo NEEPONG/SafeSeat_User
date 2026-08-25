@@ -784,7 +784,7 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
                                               ),
                                             ),
                                             Text(
-                                              'ทะเบียนรถไล่ตาม: ${_leaderDriver!.licensePlate ?? 'ไม่ระบุ'}',
+                                              'ผู้ขับรถของคุณ (${widget.carDetails})',
                                               style: const TextStyle(
                                                 fontSize: 12,
                                                 color: Color(0xFF64748B),
@@ -833,13 +833,13 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
                                                   color: Color(0xFF1E293B),
                                                 ),
                                               ),
-                                              const Text(
-                                                'ขับรถผู้ช่วยติดตามคุณ',
-                                                style: TextStyle(
-                                                  fontSize: 12,
-                                                  color: Color(0xFF64748B),
-                                                ),
-                                              ),
+                                               Text(
+                                                 'รถขับตาม: ${_followerDriver!.vehicleSummary}',
+                                                 style: const TextStyle(
+                                                   fontSize: 12,
+                                                   color: Color(0xFF64748B),
+                                                 ),
+                                               ),
                                             ],
                                           ),
                                         ),
