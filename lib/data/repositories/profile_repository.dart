@@ -32,6 +32,26 @@ class ProfileRepository {
     }
   }
 
+  Future<UserModel> topUpWallet(String phoneNo, double amount) async {
+    final url = Uri.parse('${ApiConstants.baseUrl}/api/user/profile/topup');
+    final response = await http.post(
+      url,
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'phoneNo': phoneNo,
+        'amount': amount,
+      }),
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return UserModel.fromJson(data['user']);
+    } else {
+      final data = jsonDecode(response.body);
+      throw Exception(data['error'] ?? 'เกิดข้อผิดพลาดในการเติมเงิน');
+    }
+  }
+
   Future<void> addUserCar(CarModel car) async {
     final url = Uri.parse('${ApiConstants.baseUrl}/api/user/profile/car');
     final response = await http.post(

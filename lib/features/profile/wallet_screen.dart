@@ -287,13 +287,10 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
     // Show standardized loading dialog
     AppDialog.showLoading(context, message: 'กำลังดำเนินการเติมเงิน...');
 
-    final newBalance = currentBalance + amount;
-    final updatedUser = user.copyWith(walletBalance: newBalance);
-
     try {
       final success = await ref
           .read(profileControllerProvider.notifier)
-          .editProfile(updatedUser);
+          .topUpWallet(user.phoneNo, amount);
 
       if (!context.mounted) return;
       AppDialog.hideLoading(context);
