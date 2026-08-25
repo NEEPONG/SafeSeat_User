@@ -5,8 +5,12 @@ import 'package:safeseat_mini/core/utils/app_feedback.dart';
 import 'package:safeseat_mini/core/utils/validators.dart';
 import 'package:safeseat_mini/features/profile/controllers/profile_controller.dart';
 import 'package:safeseat_mini/data/models/car_model.dart';
+import 'package:safeseat_mini/features/request_driver/select_location_screen.dart';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
+
+import 'dart:convert';
+import 'package:latlong2/latlong.dart';
 
 class EditProfileScreen extends ConsumerStatefulWidget {
   const EditProfileScreen({super.key});
@@ -26,6 +30,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   int? _selectedGender;
   String? _profileImagePath;
   File? _selectedImage;
+  LatLng? _homeLatLng;
 
   Future<void> _pickImage() async {
     final picker = ImagePicker();
@@ -47,8 +52,9 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     _nameController = TextEditingController(text: user?.name ?? '');
     _phoneController = TextEditingController(text: user?.phoneNo ?? '');
     _emailController = TextEditingController(text: user?.email ?? '');
-    _addressController = TextEditingController(text: user?.mainAddress ?? '');
+    _addressController = TextEditingController(text: user?.homeDisplayName ?? user?.mainAddress ?? '');
     _selectedGender = user?.gender;
+    _homeLatLng = user?.homeLatLng;
   }
 
   @override
@@ -71,12 +77,21 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     
     final navigator = Navigator.of(context);
 
+    String addressToSave = _addressController.text.trim();
+    if (addressToSave.isNotEmpty && _homeLatLng != null) {
+      addressToSave = jsonEncode({
+        'name': addressToSave,
+        'lat': _homeLatLng!.latitude,
+        'lng': _homeLatLng!.longitude,
+      });
+    }
+
     final success = await ref.read(profileControllerProvider.notifier).editProfileWithImage(
       currentUser: currentUser,
       name: _nameController.text,
       email: _emailController.text,
       gender: _selectedGender,
-      address: _addressController.text,
+      address: addressToSave,
       selectedImage: _selectedImage,
     );
 
@@ -416,13 +431,82 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                 ),
               ),
 
-              _buildLabel('ที่อยู่ตั้งต้น'),
-              _buildTextField(
-                controller: _addressController,
-                icon: Icons.location_on_outlined,
-                hintText: 'โปรดระบุที่อยู่หลักของคุณ',
-                maxLines: 3,
+              _buildLabel('ที่อยู่ตั้งต้น / ตำแหน่งบ้าน'),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: _buildTextField(
+                      controller: _addressController,
+                      icon: Icons.home_outlined,
+                      hintText: 'ระบุที่อยู่บ้าน หรือกดปุ่มปักหมุด',
+                      maxLines: 2,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  InkWell(
+                    onTap: () async {
+                      final result = await Navigator.push<Map<String, dynamic>>(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const SelectLocationScreen(
+                            isPickup: false,
+                            isPickingForProfile: true,
+                          ),
+                        ),
+                      );
+                      if (result != null && result['address'] != null) {
+                        setState(() {
+                          _addressController.text = result['address'] as String;
+                          if (result['latLng'] != null) {
+                            _homeLatLng = result['latLng'] as LatLng;
+                          }
+                        });
+                        if (!context.mounted) return;
+                        AppSnackBar.showSuccess(context, 'บันทึกพิกัดตำแหน่งบ้านจากแผนที่เรียบร้อย');
+                      }
+                    },
+                    borderRadius: BorderRadius.circular(12),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF0044C9),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.map_outlined, color: Colors.white, size: 22),
+                          SizedBox(height: 4),
+                          Text(
+                            'ปักหมุด',
+                            style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               ),
+
+              if (_homeLatLng != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6.0, bottom: 4.0),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.check_circle, color: Color(0xFF10B981), size: 14),
+                      const SizedBox(width: 6),
+                      Text(
+                        'พิกัดที่ปักหมุด: ${_homeLatLng!.latitude.toStringAsFixed(5)}, ${_homeLatLng!.longitude.toStringAsFixed(5)}',
+                        style: const TextStyle(
+                          color: Color(0xFF0F766E),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
 
               const SizedBox(height: 8),
 

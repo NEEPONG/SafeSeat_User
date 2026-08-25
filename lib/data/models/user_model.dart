@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'package:latlong2/latlong.dart';
+
 class UserModel {
   final String phoneNo;
   final String email;
@@ -16,6 +19,61 @@ class UserModel {
     this.profileImagePath,
     this.walletBalance = 0.0,
   });
+
+  /// Returns the human-readable custom name / address for Home
+  String? get homeDisplayName {
+    if (mainAddress == null || mainAddress!.trim().isEmpty) return null;
+    try {
+      final trimmed = mainAddress!.trim();
+      if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+        final Map<String, dynamic> data = jsonDecode(trimmed);
+        if (data.containsKey('name')) {
+          return data['name'] as String?;
+        }
+      }
+    } catch (_) {}
+    return mainAddress;
+  }
+
+  /// Returns exact latitude pinned by user
+  double? get homeLatitude {
+    if (mainAddress == null || mainAddress!.trim().isEmpty) return null;
+    try {
+      final trimmed = mainAddress!.trim();
+      if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+        final Map<String, dynamic> data = jsonDecode(trimmed);
+        if (data.containsKey('lat') && data['lat'] != null) {
+          return (data['lat'] as num).toDouble();
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  /// Returns exact longitude pinned by user
+  double? get homeLongitude {
+    if (mainAddress == null || mainAddress!.trim().isEmpty) return null;
+    try {
+      final trimmed = mainAddress!.trim();
+      if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+        final Map<String, dynamic> data = jsonDecode(trimmed);
+        if (data.containsKey('lng') && data['lng'] != null) {
+          return (data['lng'] as num).toDouble();
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  /// Returns exact LatLng object pinned by user
+  LatLng? get homeLatLng {
+    final lat = homeLatitude;
+    final lng = homeLongitude;
+    if (lat != null && lng != null && lat != 0.0 && lng != 0.0) {
+      return LatLng(lat, lng);
+    }
+    return null;
+  }
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
     return UserModel(
