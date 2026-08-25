@@ -97,15 +97,24 @@ class _HistoryTripDetailsScreenState extends ConsumerState<HistoryTripDetailsScr
     final int driverCount = (trip.leader != null ? 1 : 0) + (trip.follower != null ? 1 : 0);
 
     // Car details check
-    final carBrand = trip.userCar != null ? trip.userCar!.carBrand : 'Tesla';
-    final carModel = trip.userCar != null ? trip.userCar!.carModel : 'Model 3';
-    final carPlate = trip.userCar != null ? trip.userCar!.carPlate : 'ABC-1234';
-    final carColor = trip.userCar != null ? trip.userCar!.carColor : 'สีเทาเข้ม (Dark Grey)';
+    final hasUserCar = trip.userCar != null;
+    final carBrand = trip.userCar?.carBrand ?? '';
+    final carModel = trip.userCar?.carModel ?? '';
+    final carPlate = trip.userCar?.carPlate ?? '';
+    final carColor = trip.userCar?.carColor ?? '';
+
+    final carTitle = hasUserCar && (carBrand.isNotEmpty || carModel.isNotEmpty)
+        ? '$carBrand $carModel'.trim()
+        : (hasUserCar ? 'รถยนต์ของคุณ' : 'ไม่พบข้อมูลยานพาหนะ');
+
+    final carSubtitle = hasUserCar && carColor.isNotEmpty
+        ? 'สี $carColor'
+        : (hasUserCar ? 'รถยนต์ส่วนบุคคล' : 'ไม่มีข้อมูลรายละเอียดรถ');
 
     final pickupPoint = trip.note != null && trip.note!.isNotEmpty
         ? trip.note!
-        : 'ผับคุณหนูนิ่มประจำเชียงใหม่';
-    const dropoffPoint = 'บ้านนิ่มในเชียงใหม่แสนไกล';
+        : 'จุดรับ (${trip.pickupLatitude.toStringAsFixed(4)}, ${trip.pickupLongitude.toStringAsFixed(4)})';
+    final dropoffPoint = 'จุดส่ง (${trip.dropoffLatitude.toStringAsFixed(4)}, ${trip.dropoffLongitude.toStringAsFixed(4)})';
 
     final paymentMethodText = trip.paymentMethod == 2
         ? 'ชำระด้วย SafeSeat Wallet'
@@ -655,35 +664,41 @@ class _HistoryTripDetailsScreenState extends ConsumerState<HistoryTripDetailsScr
                           children: [
                             Row(
                               children: [
-                                Text(
-                                  '$carBrand $carModel',
-                                  style: const TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                    color: Color(0xFF0F172A),
+                                Expanded(
+                                  child: Text(
+                                    carTitle,
+                                    style: const TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFF0F172A),
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
-                                const SizedBox(width: 8),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFF1F5F9),
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  child: Text(
-                                    carPlate,
-                                    style: const TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.bold,
-                                      color: Color(0xFF475569),
+                                if (carPlate.isNotEmpty) ...[
+                                  const SizedBox(width: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFF1F5F9),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: Text(
+                                      carPlate,
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                        color: Color(0xFF475569),
+                                      ),
                                     ),
                                   ),
-                                ),
+                                ],
                               ],
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              carColor,
+                              carSubtitle,
                               style: const TextStyle(
                                 fontSize: 13,
                                 color: Color(0xFF94A3B8),

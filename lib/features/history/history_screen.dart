@@ -479,25 +479,26 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                 ? '${trip.leader!.firstname} ${trip.leader!.lastname}'
                 : 'รอกำหนดคนขับ';
 
-            final carBrand = trip.userCar != null ? trip.userCar!.carBrand : '';
-            final carModel = trip.userCar != null ? trip.userCar!.carModel : '';
-            final carColor = trip.userCar != null ? trip.userCar!.carColor : '';
-            final carPlate = trip.userCar != null ? trip.userCar!.carPlate : '';
+            final hasUserCar = trip.userCar != null;
+            final carBrand = trip.userCar?.carBrand ?? '';
+            final carModel = trip.userCar?.carModel ?? '';
+            final carColor = trip.userCar?.carColor ?? '';
+            final carPlate = trip.userCar?.carPlate ?? '';
 
-            final carModelStr = carBrand.isNotEmpty || carModel.isNotEmpty
+            final carModelStr = hasUserCar && (carBrand.isNotEmpty || carModel.isNotEmpty)
                 ? '$carBrand $carModel'.trim()
-                : 'Tesla Model 3'; // Fallback to mockup placeholder matching screenshot
+                : (hasUserCar ? 'รถยนต์ของคุณ' : 'ไม่พบข้อมูลรถ');
 
-            final carColorPlateStr = carColor.isNotEmpty || carPlate.isNotEmpty
-                ? '$carColor • $carPlate'.trim()
-                : 'สีขาว • กข 1234'; // Fallback to mockup placeholder matching screenshot
+            final carColorPlateStr = hasUserCar && (carColor.isNotEmpty || carPlate.isNotEmpty)
+                ? [if (carColor.isNotEmpty) 'สี$carColor', if (carPlate.isNotEmpty) carPlate].join(' • ')
+                : '';
 
             // Format coordinates or note for pickup/dropoff places
             final String pickupPlace = trip.note != null && trip.note!.isNotEmpty
                 ? trip.note!
-                : 'ผับคุณหนูนิ่มประจำเชียงใหม่'; // Fallback to mockup placeholder matching screenshot
+                : 'จุดรับ (${trip.pickupLatitude.toStringAsFixed(4)}, ${trip.pickupLongitude.toStringAsFixed(4)})';
             
-            const String dropoffPlace = 'จุดหมายปลายทางของการเดินทาง'; // Fallback placeholder matching screenshot
+            final String dropoffPlace = 'จุดส่ง (${trip.dropoffLatitude.toStringAsFixed(4)}, ${trip.dropoffLongitude.toStringAsFixed(4)})';
 
             return _buildTripCard(
               driverName: driverName,
