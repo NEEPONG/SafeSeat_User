@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:safeseat_mini/core/utils/app_feedback.dart';
 import 'package:safeseat_mini/core/utils/validators.dart';
+import 'package:safeseat_mini/core/widgets/driver_avatar.dart';
 import 'package:safeseat_mini/data/models/request_driver_model.dart';
 import 'package:safeseat_mini/features/history/controllers/history_controller.dart';
 
@@ -386,30 +387,12 @@ class _HistoryTripReportScreenState extends ConsumerState<HistoryTripReportScree
                       if (trip.leader != null) ...[
                         ListTile(
                           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                          leading: Stack(
-                            children: [
-                              CircleAvatar(
-                                radius: 24,
-                                backgroundColor: Colors.grey[200],
-                                child: const Icon(Icons.person, color: Colors.grey),
-                              ),
-                              Positioned(
-                                bottom: 0,
-                                right: 0,
-                                child: Container(
-                                  padding: const EdgeInsets.all(3),
-                                  decoration: const BoxDecoration(
-                                    color: Color(0xFF0D47A1),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: const Icon(
-                                    Icons.directions_car,
-                                    size: 10,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              ),
-                            ],
+                          leading: DriverAvatar(
+                            imageUrl: trip.leader!.resolvedImageUrl,
+                            fallbackName: '${trip.leader!.firstname} ${trip.leader!.lastname}',
+                            radius: 22,
+                            badgeText: 'D1',
+                            badgeColor: const Color(0xFF0D47A1),
                           ),
                           title: Text(
                             '${trip.leader!.firstname} ${trip.leader!.lastname}',
@@ -433,19 +416,19 @@ class _HistoryTripReportScreenState extends ConsumerState<HistoryTripReportScree
                               borderRadius: BorderRadius.circular(20),
                               border: Border.all(color: const Color(0xFFE2E8F0)),
                             ),
-                            child: const Row(
+                            child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Text(
-                                  '4.7',
-                                  style: TextStyle(
+                                  trip.leader!.rating != null ? trip.leader!.rating!.toStringAsFixed(1) : '5.0',
+                                  style: const TextStyle(
                                     fontSize: 13,
                                     fontWeight: FontWeight.bold,
                                     color: Color(0xFF0F172A),
                                   ),
                                 ),
-                                SizedBox(width: 4),
-                                Icon(Icons.star, color: Colors.amber, size: 14),
+                                const SizedBox(width: 4),
+                                const Icon(Icons.star, color: Colors.amber, size: 14),
                               ],
                             ),
                           ),
@@ -456,30 +439,13 @@ class _HistoryTripReportScreenState extends ConsumerState<HistoryTripReportScree
                           const Divider(height: 1, indent: 16, endIndent: 16, color: Color(0xFFE2E8F0)),
                         ListTile(
                           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                          leading: Stack(
-                            children: [
-                              CircleAvatar(
-                                radius: 24,
-                                backgroundColor: Colors.grey[200],
-                                child: const Icon(Icons.person, color: Colors.grey),
-                              ),
-                              Positioned(
-                                bottom: 0,
-                                right: 0,
-                                child: Container(
-                                  padding: const EdgeInsets.all(3),
-                                  decoration: const BoxDecoration(
-                                    color: Color(0xFF64748B),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: const Icon(
-                                    Icons.two_wheeler,
-                                    size: 10,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              ),
-                            ],
+                          leading: DriverAvatar(
+                            imageUrl: trip.follower!.resolvedImageUrl,
+                            fallbackName: '${trip.follower!.firstname} ${trip.follower!.lastname}',
+                            radius: 22,
+                            badgeText: 'D2',
+                            badgeColor: const Color(0xFF64748B),
+                            defaultIcon: Icons.motorcycle,
                           ),
                           title: Text(
                             '${trip.follower!.firstname} ${trip.follower!.lastname}',
@@ -503,19 +469,19 @@ class _HistoryTripReportScreenState extends ConsumerState<HistoryTripReportScree
                               borderRadius: BorderRadius.circular(20),
                               border: Border.all(color: const Color(0xFFE2E8F0)),
                             ),
-                            child: const Row(
+                            child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Text(
-                                  '4.9',
-                                  style: TextStyle(
+                                  trip.follower!.rating != null ? trip.follower!.rating!.toStringAsFixed(1) : '5.0',
+                                  style: const TextStyle(
                                     fontSize: 13,
                                     fontWeight: FontWeight.bold,
                                     color: Color(0xFF0F172A),
                                   ),
                                 ),
-                                SizedBox(width: 4),
-                                Icon(Icons.star, color: Colors.amber, size: 14),
+                                const SizedBox(width: 4),
+                                const Icon(Icons.star, color: Colors.amber, size: 14),
                               ],
                             ),
                           ),

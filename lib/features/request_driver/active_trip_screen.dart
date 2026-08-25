@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:safeseat_mini/core/theme/app_theme.dart';
 import 'package:safeseat_mini/core/utils/app_feedback.dart';
+import 'package:safeseat_mini/core/widgets/driver_avatar.dart';
 import 'package:safeseat_mini/features/request_driver/controllers/request_driver_controller.dart';
 import 'package:safeseat_mini/features/profile/controllers/profile_controller.dart';
 import 'package:safeseat_mini/core/controllers/user_controller.dart';
@@ -762,9 +763,12 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
                                   // Leader Info Row
                                   Row(
                                     children: [
-                                      CircleAvatar(
-                                        backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.1),
-                                        child: const Icon(Icons.person, color: AppTheme.primaryColor),
+                                      DriverAvatar(
+                                        imageUrl: _leaderDriver!.resolvedImageUrl,
+                                        fallbackName: '${_leaderDriver!.firstname} ${_leaderDriver!.lastname}',
+                                        radius: 22,
+                                        badgeText: 'D1',
+                                        badgeColor: const Color(0xFF2563EB),
                                       ),
                                       const SizedBox(width: 12),
                                       Expanded(
@@ -808,9 +812,13 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
                                     // Follower Info Row
                                     Row(
                                       children: [
-                                        CircleAvatar(
-                                          backgroundColor: Colors.blueGrey.withValues(alpha: 0.1),
-                                          child: const Icon(Icons.motorcycle, color: Colors.blueGrey),
+                                        DriverAvatar(
+                                          imageUrl: _followerDriver!.resolvedImageUrl,
+                                          fallbackName: '${_followerDriver!.firstname} ${_followerDriver!.lastname}',
+                                          radius: 22,
+                                          badgeText: 'D2',
+                                          badgeColor: const Color(0xFF475569),
+                                          defaultIcon: Icons.motorcycle,
                                         ),
                                         const SizedBox(width: 12),
                                         Expanded(

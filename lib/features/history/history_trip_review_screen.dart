@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:safeseat_mini/core/theme/app_theme.dart';
 import 'package:safeseat_mini/core/utils/app_feedback.dart';
 import 'package:safeseat_mini/core/utils/validators.dart';
+import 'package:safeseat_mini/core/widgets/driver_avatar.dart';
 import 'package:safeseat_mini/data/models/request_driver_model.dart';
 import 'package:safeseat_mini/data/models/review_model.dart';
 import 'package:safeseat_mini/features/history/controllers/history_controller.dart';
@@ -99,7 +100,7 @@ class _HistoryTripReviewScreenState extends ConsumerState<HistoryTripReviewScree
   Widget _buildReviewCard({
     required String name,
     required String role,
-    required String avatarUrl,
+    String? avatarUrl,
     required String ratingLabel,
     required int currentRating,
     required Function(int) onRatingChanged,
@@ -128,33 +129,13 @@ class _HistoryTripReviewScreenState extends ConsumerState<HistoryTripReviewScree
           // Profile section
           Row(
             children: [
-              Stack(
-                children: [
-                  CircleAvatar(
-                    radius: 32,
-                    backgroundColor: Colors.grey[200],
-                    backgroundImage: NetworkImage(avatarUrl),
-                  ),
-                  Positioned(
-                    bottom: 0,
-                    right: 0,
-                    child: Container(
-                      padding: const EdgeInsets.all(4),
-                      decoration: BoxDecoration(
-                        color: badgeColor,
-                        shape: BoxShape.circle,
-                      ),
-                      child: Text(
-                        badgeText,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 8,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
+              DriverAvatar(
+                imageUrl: avatarUrl,
+                fallbackName: name,
+                radius: 30,
+                badgeText: badgeText,
+                badgeColor: badgeColor,
+                defaultIcon: role.toLowerCase().contains('co') ? Icons.motorcycle : Icons.person,
               ),
               const SizedBox(width: 16),
               Expanded(
@@ -429,7 +410,7 @@ class _HistoryTripReviewScreenState extends ConsumerState<HistoryTripReviewScree
                     _buildReviewCard(
                       name: driverName,
                       role: 'Driver',
-                      avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150',
+                      avatarUrl: widget.trip.leader?.resolvedImageUrl,
                       ratingLabel: 'Rate your driver',
                       currentRating: _driverRating,
                       onRatingChanged: (val) {
@@ -448,7 +429,7 @@ class _HistoryTripReviewScreenState extends ConsumerState<HistoryTripReviewScree
                     _buildReviewCard(
                       name: coDriverName,
                       role: 'Co-driver',
-                      avatarUrl: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150',
+                      avatarUrl: widget.trip.follower?.resolvedImageUrl,
                       ratingLabel: 'Rate your co-driver',
                       currentRating: _coDriverRating,
                       onRatingChanged: (val) {

@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:safeseat_mini/core/widgets/driver_avatar.dart';
 import 'package:safeseat_mini/data/models/driver_report_model.dart';
 
 class ReportedDriverInfo {
@@ -366,35 +367,13 @@ class _HistoryReportDetailsScreenState extends State<HistoryReportDetailsScreen>
       ),
       child: Row(
         children: [
-          Stack(
-            children: [
-              CircleAvatar(
-                radius: 28,
-                backgroundColor: Colors.grey[200],
-                backgroundImage: driver.imageUrl != null
-                    ? NetworkImage(driver.imageUrl!)
-                    : null,
-                child: driver.imageUrl == null
-                    ? const Icon(Icons.person, color: Colors.grey, size: 30)
-                    : null,
-              ),
-              Positioned(
-                bottom: 0,
-                right: 0,
-                child: Container(
-                  padding: const EdgeInsets.all(2),
-                  decoration: const BoxDecoration(
-                    color: Color(0xFF0D47A1),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.check,
-                    size: 11,
-                    color: Colors.white,
-                  ),
-                ),
-              ),
-            ],
+          DriverAvatar(
+            imageUrl: driver.imageUrl,
+            fallbackName: driver.fullname,
+            radius: 28,
+            badgeText: driver.role.contains('หัวหน้า') || driver.role.contains('คนขับหลัก') ? 'D1' : (driver.role.contains('ผู้ช่วย') ? 'D2' : null),
+            badgeColor: driver.role.contains('หัวหน้า') || driver.role.contains('คนขับหลัก') ? const Color(0xFF0D47A1) : const Color(0xFF64748B),
+            defaultIcon: driver.role.contains('ผู้ช่วย') ? Icons.motorcycle : Icons.person,
           ),
           const SizedBox(width: 14),
           Expanded(

@@ -3,6 +3,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:safeseat_mini/core/theme/app_theme.dart';
+import 'package:safeseat_mini/core/widgets/driver_avatar.dart';
 import 'package:safeseat_mini/data/models/request_driver_model.dart';
 import 'package:safeseat_mini/data/models/review_model.dart';
 import 'package:safeseat_mini/features/history/controllers/history_controller.dart';
@@ -392,35 +393,12 @@ class _HistoryTripDetailsScreenState extends ConsumerState<HistoryTripDetailsScr
                               ),
                               child: Column(
                                 children: [
-                                  Stack(
-                                    children: [
-                                      CircleAvatar(
-                                        radius: 36,
-                                        backgroundColor: Colors.grey[200],
-                                        backgroundImage: const NetworkImage(
-                                          'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150',
-                                        ),
-                                      ),
-                                      Positioned(
-                                        bottom: 0,
-                                        right: 0,
-                                        child: Container(
-                                          padding: const EdgeInsets.all(4),
-                                          decoration: const BoxDecoration(
-                                            color: Color(0xFF2563EB),
-                                            shape: BoxShape.circle,
-                                          ),
-                                          child: const Text(
-                                            'D1',
-                                            style: TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 9,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ],
+                                  DriverAvatar(
+                                    imageUrl: trip.leader?.resolvedImageUrl,
+                                    fallbackName: leaderName,
+                                    radius: 36,
+                                    badgeText: 'D1',
+                                    badgeColor: const Color(0xFF2563EB),
                                   ),
                                   const SizedBox(height: 12),
                                   Text(
@@ -451,12 +429,12 @@ class _HistoryTripDetailsScreenState extends ConsumerState<HistoryTripDetailsScr
                                     ),
                                     child: Row(
                                       mainAxisSize: MainAxisSize.min,
-                                      children: const [
-                                        Icon(Icons.star_rounded, color: Colors.amber, size: 16),
-                                        SizedBox(width: 4),
+                                      children: [
+                                        const Icon(Icons.star_rounded, color: Colors.amber, size: 16),
+                                        const SizedBox(width: 4),
                                         Text(
-                                          '4.9',
-                                          style: TextStyle(
+                                          trip.leader?.rating != null ? trip.leader!.rating!.toStringAsFixed(1) : '5.0',
+                                          style: const TextStyle(
                                             fontSize: 11,
                                             fontWeight: FontWeight.bold,
                                             color: Color(0xFF475569),
@@ -489,35 +467,13 @@ class _HistoryTripDetailsScreenState extends ConsumerState<HistoryTripDetailsScr
                                     ),
                                     child: Column(
                                       children: [
-                                        Stack(
-                                          children: [
-                                            CircleAvatar(
-                                              radius: 36,
-                                              backgroundColor: Colors.grey[200],
-                                              backgroundImage: const NetworkImage(
-                                                'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150',
-                                              ),
-                                            ),
-                                            Positioned(
-                                              bottom: 0,
-                                              right: 0,
-                                              child: Container(
-                                                padding: const EdgeInsets.all(4),
-                                                decoration: const BoxDecoration(
-                                                  color: Color(0xFF475569),
-                                                  shape: BoxShape.circle,
-                                                ),
-                                                child: const Text(
-                                                  'D2',
-                                                  style: TextStyle(
-                                                    color: Colors.white,
-                                                    fontSize: 9,
-                                                    fontWeight: FontWeight.bold,
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                          ],
+                                        DriverAvatar(
+                                          imageUrl: trip.follower?.resolvedImageUrl,
+                                          fallbackName: followerName,
+                                          radius: 36,
+                                          badgeText: 'D2',
+                                          badgeColor: const Color(0xFF475569),
+                                          defaultIcon: Icons.motorcycle,
                                         ),
                                         const SizedBox(height: 12),
                                         Text(
@@ -548,12 +504,12 @@ class _HistoryTripDetailsScreenState extends ConsumerState<HistoryTripDetailsScr
                                           ),
                                           child: Row(
                                             mainAxisSize: MainAxisSize.min,
-                                            children: const [
-                                              Icon(Icons.star_rounded, color: Colors.amber, size: 16),
-                                              SizedBox(width: 4),
+                                            children: [
+                                              const Icon(Icons.star_rounded, color: Colors.amber, size: 16),
+                                              const SizedBox(width: 4),
                                               Text(
-                                                '4.7',
-                                                style: TextStyle(
+                                                trip.follower?.rating != null ? trip.follower!.rating!.toStringAsFixed(1) : '5.0',
+                                                style: const TextStyle(
                                                   fontSize: 11,
                                                   fontWeight: FontWeight.bold,
                                                   color: Color(0xFF475569),

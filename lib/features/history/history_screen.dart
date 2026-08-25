@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:safeseat_mini/core/theme/app_theme.dart';
 import 'package:safeseat_mini/core/controllers/user_controller.dart';
+import 'package:safeseat_mini/core/widgets/driver_avatar.dart';
 import 'package:safeseat_mini/features/history/controllers/history_controller.dart';
 import 'package:safeseat_mini/features/history/history_trip_details_screen.dart';
 import 'package:safeseat_mini/features/history/history_report_details_screen.dart';
@@ -500,6 +501,8 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
 
             return _buildTripCard(
               driverName: driverName,
+              driverImageUrl: trip.leader?.resolvedImageUrl,
+              driverRating: trip.leader?.rating,
               orderCode: '#ORD${trip.requestId.toString().padLeft(4, '0')}',
               status: trip.requestStatus,
               statusColor: statusColor,
@@ -574,6 +577,8 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
 
   Widget _buildTripCard({
     required String driverName,
+    String? driverImageUrl,
+    double? driverRating,
     required String orderCode,
     required String status,
     required Color statusColor,
@@ -607,37 +612,78 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
             padding: const EdgeInsets.all(16.0),
             child: Row(
               children: [
-                // Car Circle Icon
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: const BoxDecoration(
-                    color: Color(0xFFEFF6FF),
-                    shape: BoxShape.circle,
+                if (driverImageUrl != null && driverImageUrl.isNotEmpty)
+                  DriverAvatar(
+                    imageUrl: driverImageUrl,
+                    fallbackName: driverName,
+                    radius: 20,
+                    badgeText: 'D1',
+                    badgeColor: const Color(0xFF2563EB),
+                  )
+                else
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFEFF6FF),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.directions_car_filled_outlined,
+                      color: Color(0xFF2563EB),
+                      size: 20,
+                    ),
                   ),
-                  child: const Icon(
-                    Icons.directions_car_filled_outlined,
-                    color: Color(0xFF2563EB),
-                    size: 24,
-                  ),
-                ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        driverName,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF0F172A),
-                        ),
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              driverName,
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF0F172A),
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (driverRating != null) ...[
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFFFBEB),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(color: const Color(0xFFFEF3C7)),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.star_rounded, size: 12, color: Colors.amber),
+                                  const SizedBox(width: 2),
+                                  Text(
+                                    driverRating.toStringAsFixed(1),
+                                    style: const TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFFB45309),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                       const SizedBox(height: 2),
                       Text(
                         orderCode,
                         style: const TextStyle(
-                          fontSize: 13,
+                          fontSize: 12,
                           color: Color(0xFF64748B),
                         ),
                       ),

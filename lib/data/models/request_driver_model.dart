@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:safeseat_mini/data/models/car_model.dart';
 
 class DriverProfileModel {
@@ -6,6 +7,9 @@ class DriverProfileModel {
   final String lastname;
   final String phoneNo;
   final String? licensePlate;
+  final String? profileImage;
+  final double? rating;
+  final int? totalReviews;
 
   DriverProfileModel({
     required this.username,
@@ -13,15 +17,79 @@ class DriverProfileModel {
     required this.lastname,
     required this.phoneNo,
     this.licensePlate,
+    this.profileImage,
+    this.rating,
+    this.totalReviews,
   });
 
+  String get fullName => '$firstname $lastname'.trim().isNotEmpty ? '$firstname $lastname'.trim() : username;
+
+  String? get resolvedImageUrl {
+    if (profileImage == null || profileImage!.trim().isEmpty) return null;
+    String raw = profileImage!.trim();
+
+    // Check if JSON formatted string
+    if (raw.startsWith('{')) {
+      try {
+        final decoded = jsonDecode(raw);
+        if (decoded is Map && decoded['profile'] != null) {
+          raw = decoded['profile'].toString();
+        }
+      } catch (_) {}
+    } else if (raw.startsWith('[')) {
+      try {
+        final decoded = jsonDecode(raw);
+        if (decoded is List && decoded.isNotEmpty) {
+          raw = decoded.first.toString();
+        }
+      } catch (_) {}
+    }
+
+    if (raw.startsWith('http://') || raw.startsWith('https://')) {
+      return raw;
+    }
+
+    // Handle compressed prefix
+    if (raw.startsWith('p:')) {
+      raw = 'drivers/profile/${raw.substring(2)}';
+    } else if (raw.startsWith('d:')) {
+      raw = 'drivers/documents/${raw.substring(2)}';
+    }
+
+    while (raw.startsWith('/')) {
+      raw = raw.substring(1);
+    }
+    if (raw.startsWith('images/')) {
+      raw = raw.substring(7);
+    }
+
+    const baseUrl = 'https://qbionbozkvlekpakvstg.supabase.co';
+    return '$baseUrl/storage/v1/object/public/images/$raw';
+  }
+
   factory DriverProfileModel.fromJson(Map<String, dynamic> json) {
+    // Parse rating safely (can be int, double, or string)
+    double? parsedRating;
+    if (json['rating'] != null) {
+      parsedRating = double.tryParse(json['rating'].toString());
+    } else if (json['average_rating'] != null) {
+      parsedRating = double.tryParse(json['average_rating'].toString());
+    }
+
+    int? parsedReviews;
+    if (json['total_reviews'] != null) {
+      parsedReviews = int.tryParse(json['total_reviews'].toString());
+    }
+
     return DriverProfileModel(
       username: json['username'] ?? '',
       firstname: json['firstname'] ?? '',
       lastname: json['lastname'] ?? '',
-      phoneNo: json['phone_no'] ?? '',
-      licensePlate: json['license_plate'],
+      phoneNo: json['phone_no'] ?? json['phoneno'] ?? '',
+      licensePlate: json['license_plate'] ?? (json['drivercar'] is Map ? json['drivercar']['carplate'] : null),
+      profileImage: json['profile_image'] ?? json['profileimagepath'] ?? json['regisimagepath'],
+      rating: parsedRating,
+      totalReviews: parsedReviews,
     );
   }
 
@@ -32,6 +100,9 @@ class DriverProfileModel {
       'lastname': lastname,
       'phone_no': phoneNo,
       'license_plate': licensePlate,
+      'profile_image': profileImage,
+      'rating': rating,
+      'total_reviews': totalReviews,
     };
   }
 }
