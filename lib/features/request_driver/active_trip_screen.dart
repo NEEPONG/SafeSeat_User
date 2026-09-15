@@ -170,33 +170,52 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
       _isLoadingRoute = true;
     });
 
-    // Start route from driver (buddyteam) location if available, else pickup location
-    final startLatLng = _driverLatLng ?? _pickupLatLng;
-
-    // While the driver is still coming to pick the user up, draw the FULL
-    // journey (driver -> pickup -> destination) so the polyline always ends
-    // at the final destination. Once the trip is underway, route straight
-    // from the driver's position to the destination.
-    final bool headingToPickup =
+    // 1. Determine current journey phase
+    final bool isHeadingToPickup =
         _currentStatus == 'กำลังไปรับ' ||
         _currentStatus == 'กำลังค้นหาคนขับ' ||
         _currentStatus == 'รอคนขับ';
 
+    final bool isArrivedAtPickup =
+        _currentStatus == 'ถึงจุดนัดหมาย' ||
+        _currentStatus == 'ถึงจุดรับแล้ว';
+
+    final bool isCompleted =
+        _currentStatus == 'เสร็จสิ้น' ||
+        _currentStatus == 'completed';
+
+    // 2. Determine start and target endpoints for current phase:
+    // - Heading to Pickup: Driver -> Pickup (เส้นทางเดียวก่อน เพื่อไม่ให้ซูมไกลเกินไป)
+    // - Arrived at Pickup: Pickup -> Destination
+    // - In Transit (Driving to Destination): Driver Live Pos -> Destination
+    // - Completed: Pickup -> Destination
+    final startLatLng = _driverLatLng ?? _pickupLatLng;
+    
+    LatLng routeOrigin;
+    LatLng routeDestination;
+
+    if (isHeadingToPickup) {
+      routeOrigin = startLatLng;
+      routeDestination = _pickupLatLng;
+    } else if (isArrivedAtPickup || isCompleted) {
+      routeOrigin = _pickupLatLng;
+      routeDestination = _dropoffLatLng;
+    } else {
+      // In transit / travelling to destination
+      routeOrigin = startLatLng;
+      routeDestination = _dropoffLatLng;
+    }
+
     try {
       final List<LatLng> points = [];
-      if (headingToPickup) {
-        // Leg 1: driver -> pickup (skipped when no driver location yet)
-        if (startLatLng != _pickupLatLng) {
-          final leg1 = await RouteService.getRouteDetails(startLatLng, _pickupLatLng);
-          points.addAll(leg1?.points ?? [startLatLng, _pickupLatLng]);
-        }
-        // Leg 2: pickup -> destination (always shown)
-        final leg2 = await RouteService.getRouteDetails(_pickupLatLng, _dropoffLatLng);
-        points.addAll(leg2?.points ?? [_pickupLatLng, _dropoffLatLng]);
+
+      // Only request route if origin and destination are distinct
+      if (routeOrigin.latitude != routeDestination.latitude ||
+          routeOrigin.longitude != routeDestination.longitude) {
+        final routeDetails = await RouteService.getRouteDetails(routeOrigin, routeDestination);
+        points.addAll(routeDetails?.points ?? [routeOrigin, routeDestination]);
       } else {
-        // Driver (or pickup) -> destination
-        final routeDetails = await RouteService.getRouteDetails(startLatLng, _dropoffLatLng);
-        points.addAll(routeDetails?.points ?? [startLatLng, _dropoffLatLng]);
+        points.add(routeOrigin);
       }
 
       if (mounted) {
@@ -213,9 +232,7 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          _routePoints = headingToPickup
-              ? [startLatLng, _pickupLatLng, _dropoffLatLng]
-              : [startLatLng, _dropoffLatLng];
+          _routePoints = [routeOrigin, routeDestination];
           _isLoadingRoute = false;
         });
       }
@@ -223,20 +240,50 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
   }
 
   void _fitMapBounds() {
+    final bool isHeadingToPickup =
+        _currentStatus == 'กำลังไปรับ' ||
+        _currentStatus == 'กำลังค้นหาคนขับ' ||
+        _currentStatus == 'รอคนขับ';
+
+    final bool isArrivedAtPickup =
+        _currentStatus == 'ถึงจุดนัดหมาย' ||
+        _currentStatus == 'ถึงจุดรับแล้ว';
+
     final pointsToFit = <LatLng>[];
-    if (_driverLatLng != null) {
-      pointsToFit.add(_driverLatLng!);
+
+    if (isHeadingToPickup) {
+      // Focus strictly on Driver approaching Pickup Location
+      if (_driverLatLng != null) {
+        pointsToFit.add(_driverLatLng!);
+      }
+      pointsToFit.add(_pickupLatLng);
+    } else if (isArrivedAtPickup) {
+      // Focus on Pickup & Destination to prepare for journey
+      pointsToFit.add(_pickupLatLng);
+      pointsToFit.add(_dropoffLatLng);
+    } else {
+      // In transit or completed: focus on Driver/Pickup -> Destination
+      if (_driverLatLng != null) {
+        pointsToFit.add(_driverLatLng!);
+      } else {
+        pointsToFit.add(_pickupLatLng);
+      }
+      pointsToFit.add(_dropoffLatLng);
     }
-    pointsToFit.add(_pickupLatLng);
-    pointsToFit.add(_dropoffLatLng);
 
     if (pointsToFit.isEmpty) return;
-    
-    // Fit map bounds to show driver position, pickup and dropoff
+
+    // If single point or both points are identical, smoothly center the camera
+    if (pointsToFit.length == 1 || (pointsToFit.length == 2 && pointsToFit[0] == pointsToFit[1])) {
+      _mapController.move(pointsToFit.first, 15.5);
+      return;
+    }
+
+    // Fit map bounds to show relevant focus points with responsive padding
     _mapController.fitCamera(
       CameraFit.bounds(
         bounds: LatLngBounds.fromPoints(pointsToFit),
-        padding: const EdgeInsets.symmetric(horizontal: 60.0, vertical: 80.0),
+        padding: const EdgeInsets.symmetric(horizontal: 50.0, vertical: 70.0),
       ),
     );
   }
@@ -366,15 +413,38 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
   }
 
   void _shareTripLink() {
-    final String shareUrl = 'http://localhost:5000/trip?id=${widget.requestId}';
+    final String leaderName = _leaderDriver != null && _leaderDriver!.fullName.isNotEmpty
+        ? _leaderDriver!.fullName
+        : 'ทีมคนขับ SafeSeat';
 
-    // Auto-copy the link to the clipboard so the user can paste it anywhere
-    Clipboard.setData(ClipboardData(text: shareUrl));
-    AppSnackBar.showSuccess(context, 'คัดลอกลิงก์ติดตามการเดินทางเรียบร้อยแล้ว');
+    final String carInfo = widget.carDetails.trim().isNotEmpty
+        ? widget.carDetails
+        : 'รถยนต์ของผู้ใช้บริการ';
 
+    final String shareMessage =
+        '🛡️ SafeSeat — แจ้งเตือนการเดินทาง (Live Tracking)\n\n'
+        'ฉันกำลังเดินทางกลับอย่างปลอดภัยด้วยบริการคนขับแทน SafeSeat\n'
+        'คุณสามารถนำรหัสทริปไปตรวจสอบสถานะและพิกัดการเดินทางสดได้:\n\n'
+        '🔖 รหัสทริป: #${widget.requestId}\n'
+        '🟢 สถานะปัจจุบัน: $_currentStatus\n'
+        '🚘 ยานพาหนะ: $carInfo\n'
+        '👤 ทีมคนขับ: $leaderName\n\n'
+        '-----------------------------------\n'
+        '🔍 วิธีติดตามการเดินทาง:\n'
+        '1. ไปที่เว็บไซต์ SafeSeat\n'
+        '2. เลือกเมนู "ติดตามการเดินทาง" (Live Trip Tracking)\n'
+        '3. ระบุรหัสทริป: #${widget.requestId}\n'
+        '-----------------------------------';
+
+    // Auto-copy the message to the clipboard so the user can paste it anywhere
+    Clipboard.setData(ClipboardData(text: shareMessage));
+    AppSnackBar.showSuccess(context, 'คัดลอกข้อความติดตามการเดินทางเรียบร้อยแล้ว');
+
+    final box = context.findRenderObject() as RenderBox?;
     Share.share(
-      'ฉันกำลังเดินทางด้วย SafeSeat! คุณสามารถติดตามพิกัดสดและสถานะการเดินทางของฉันได้ที่นี่: $shareUrl',
-      subject: 'ติดตามการเดินทางของฉัน (SafeSeat)',
+      shareMessage,
+      subject: 'ติดตามการเดินทางของฉันบน SafeSeat (#${widget.requestId})',
+      sharePositionOrigin: box != null ? box.localToGlobal(Offset.zero) & box.size : null,
     );
   }
 

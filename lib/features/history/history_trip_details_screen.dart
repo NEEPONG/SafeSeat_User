@@ -67,8 +67,9 @@ class _HistoryTripDetailsScreenState extends ConsumerState<HistoryTripDetailsScr
   }
 
   String _formatDateTime(String dateTimeStr) {
-    final parsed = DateTime.tryParse(dateTimeStr);
+    var parsed = DateTime.tryParse(dateTimeStr);
     if (parsed == null) return dateTimeStr;
+    parsed = parsed.toLocal();
     final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     
     // Safety check for month range

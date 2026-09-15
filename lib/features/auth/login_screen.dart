@@ -72,31 +72,53 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const SizedBox(height: 40),
-                  const Center(
-                    child: Icon(
-                      Icons.security,
-                      size: 80,
-                      color: AppTheme.primaryColor,
+                  const SizedBox(height: 32),
+                  Center(
+                    child: Image.asset(
+                      'assets/images/logo.png',
+                      width: 88,
+                      height: 88,
+                      errorBuilder: (context, error, stackTrace) {
+                        return Container(
+                          width: 88,
+                          height: 88,
+                          decoration: BoxDecoration(
+                            color: AppTheme.primaryColor.withValues(alpha: 0.08),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Center(
+                            child: Icon(
+                              Icons.shield_rounded,
+                              size: 48,
+                              color: AppTheme.primaryColor,
+                            ),
+                          ),
+                        );
+                      },
                     ),
                   ),
-                  const SizedBox(height: 40),
+                  const SizedBox(height: 28),
                   const Text(
-                    'ยินดีต้อนรับกลับมา!',
+                    'เดินทางปลอดภัยกับ SafeSeat',
                     style: TextStyle(
-                      fontSize: 28,
+                      fontSize: 26,
                       fontWeight: FontWeight.bold,
                       color: Color(0xFF1E293B),
+                      letterSpacing: -0.5,
                     ),
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    'กรุณาเข้าสู่ระบบเพื่อดำเนินการต่อ',
-                    style: TextStyle(fontSize: 16, color: Color(0xFF64748B)),
+                    'ให้เราดูแลทั้งคุณและรถ ส่งกลับถึงบ้านอย่างมั่นใจ',
+                    style: TextStyle(
+                      fontSize: 15,
+                      color: Color(0xFF64748B),
+                      height: 1.4,
+                    ),
                     textAlign: TextAlign.center,
                   ),
-                  const SizedBox(height: 48),
+                  const SizedBox(height: 40),
 
                   // Phone Field
                   Container(
