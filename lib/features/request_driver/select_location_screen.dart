@@ -9,13 +9,18 @@ import 'package:safeseat_mini/features/request_driver/controllers/request_driver
 import 'package:safeseat_mini/core/constants/api_constants.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:safeseat_mini/core/theme/app_theme.dart';
+import 'package:safeseat_mini/core/utils/app_feedback.dart';
+
+import 'package:safeseat_mini/core/controllers/user_controller.dart';
 
 class SelectLocationScreen extends ConsumerStatefulWidget {
   final bool isPickup;
+  final bool isPickingForProfile;
 
   const SelectLocationScreen({
     super.key,
     required this.isPickup,
+    this.isPickingForProfile = false,
   });
 
   @override
@@ -181,9 +186,7 @@ class _SelectLocationScreenState extends ConsumerState<SelectLocationScreen> {
     serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('กรุณาเปิดบริการระบุตำแหน่ง (GPS)')),
-        );
+        AppSnackBar.showWarning(context, 'กรุณาเปิดบริการระบุตำแหน่ง (GPS)');
       }
       return;
     }
@@ -193,9 +196,7 @@ class _SelectLocationScreenState extends ConsumerState<SelectLocationScreen> {
       permission = await Geolocator.requestPermission();
       if (permission == LocationPermission.denied) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('สิทธิ์การเข้าถึงตำแหน่งถูกปฏิเสธ')),
-          );
+          AppSnackBar.showWarning(context, 'สิทธิ์การเข้าถึงตำแหน่งถูกปฏิเสธ');
         }
         return;
       }
@@ -203,10 +204,9 @@ class _SelectLocationScreenState extends ConsumerState<SelectLocationScreen> {
     
     if (permission == LocationPermission.deniedForever) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('สิทธิ์การระบุตำแหน่งถูกปฏิเสธอย่างถาวร กรุณาเปิดสิทธิ์ในการตั้งค่าของอุปกรณ์'),
-          ),
+        AppSnackBar.showError(
+          context,
+          'สิทธิ์การระบุตำแหน่งถูกปฏิเสธอย่างถาวร กรุณาเปิดสิทธิ์ในการตั้งค่าของอุปกรณ์',
         );
       }
       return;
@@ -235,9 +235,7 @@ class _SelectLocationScreenState extends ConsumerState<SelectLocationScreen> {
       await _reverseGeocode(latLng);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('ไม่สามารถดึงตำแหน่งปัจจุบันได้: $e')),
-        );
+        AppSnackBar.showError(context, 'ไม่สามารถดึงตำแหน่งปัจจุบันได้: $e');
       }
     } finally {
       if (mounted) {
@@ -328,9 +326,67 @@ class _SelectLocationScreenState extends ConsumerState<SelectLocationScreen> {
     _mapController.move(latLng, 16.0);
   }
 
+  Future<void> _selectSavedHome(String homeAddress, LatLng? homeLatLng) async {
+    setState(() {
+      _resolvedAddress = homeAddress;
+      _showSearchResults = false;
+      _searchController.clear();
+      FocusScope.of(context).unfocus();
+    });
+
+    // If exact pinned LatLng is available, use it directly!
+    if (homeLatLng != null) {
+      setState(() {
+        _currentLatLng = homeLatLng;
+        _isGeocoding = false;
+      });
+      _mapController.move(homeLatLng, 16.0);
+      return;
+    }
+
+    setState(() {
+      _isGeocoding = true;
+    });
+
+    try {
+      final searchUrl = Uri.parse(
+        'https://nominatim.openstreetmap.org/search?q=${Uri.encodeComponent(homeAddress)}&format=json&limit=1',
+      );
+      final response = await http.get(searchUrl, headers: {
+        'User-Agent': 'SafeSeatMiniApp/1.0',
+        'Accept-Language': 'th,en',
+      });
+      if (response.statusCode == 200) {
+        final List data = jsonDecode(response.body);
+        if (data.isNotEmpty) {
+          final lat = double.parse(data[0]['lat'].toString());
+          final lon = double.parse(data[0]['lon'].toString());
+          final latLng = LatLng(lat, lon);
+          if (mounted) {
+            setState(() {
+              _currentLatLng = latLng;
+              _isGeocoding = false;
+            });
+            _mapController.move(latLng, 16.0);
+            return;
+          }
+        }
+      }
+    } catch (_) {}
+
+    if (mounted) {
+      setState(() {
+        _isGeocoding = false;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final titleText = widget.isPickup ? 'จาก' : 'ไปที่';
+    final user = ref.watch(userProvider);
+    final titleText = widget.isPickingForProfile
+        ? 'เลือกตำแหน่งที่อยู่บ้าน'
+        : (widget.isPickup ? 'จาก' : 'ไปที่');
     final themeColor = AppTheme.primaryColor;
 
     return Scaffold(
@@ -374,23 +430,29 @@ class _SelectLocationScreenState extends ConsumerState<SelectLocationScreen> {
                     ),
                   ),
                   // The actual Pin Icon
-                  widget.isPickup
+                  widget.isPickingForProfile
                       ? const Icon(
-                          Icons.location_on,
-                          color: Colors.red,
+                          Icons.home,
+                          color: Color(0xFF0044C9),
                           size: 45,
                         )
-                      : const Icon(
-                          Icons.location_on,
-                          color: Color(0xFF10B981),
-                          size: 45,
-                        ),
+                      : (widget.isPickup
+                          ? const Icon(
+                              Icons.location_on,
+                              color: Colors.red,
+                              size: 45,
+                            )
+                          : const Icon(
+                              Icons.location_on,
+                              color: Color(0xFF10B981),
+                              size: 45,
+                            )),
                 ],
               ),
             ),
           ),
 
-          // 3. Top Search Card
+          // 3. Top Search Card & Quick Suggestions
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.all(16.0),
@@ -422,11 +484,15 @@ class _SelectLocationScreenState extends ConsumerState<SelectLocationScreen> {
                             borderRadius: BorderRadius.circular(15),
                           ),
                           child: Text(
-                            widget.isPickup ? 'ต้นทาง' : 'ปลายทาง',
+                            widget.isPickingForProfile
+                                ? 'ที่อยู่บ้าน'
+                                : (widget.isPickup ? 'ต้นทาง' : 'ปลายทาง'),
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.bold,
-                              color: widget.isPickup ? Colors.red : Colors.blueGrey[800],
+                              color: widget.isPickingForProfile
+                                  ? const Color(0xFF0044C9)
+                                  : (widget.isPickup ? Colors.red : Colors.blueGrey[800]),
                             ),
                           ),
                         ),
@@ -456,6 +522,46 @@ class _SelectLocationScreenState extends ConsumerState<SelectLocationScreen> {
                       ],
                     ),
                   ),
+                  
+                  // Quick Suggestions Chips (when search is empty)
+                  if (!_showSearchResults && !widget.isPickingForProfile)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8.0),
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            if (user?.homeDisplayName != null && user!.homeDisplayName!.trim().isNotEmpty) ...[
+                              ActionChip(
+                                avatar: const Icon(Icons.home, color: AppTheme.primaryColor, size: 16),
+                                label: Text(
+                                  'บ้าน: ${user.homeDisplayName}',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                                ),
+                                backgroundColor: Colors.white,
+                                elevation: 3,
+                                shadowColor: Colors.black26,
+                                onPressed: () => _selectSavedHome(user.homeDisplayName!, user.homeLatLng),
+                              ),
+                              const SizedBox(width: 8),
+                            ],
+                            ActionChip(
+                              avatar: const Icon(Icons.my_location, color: Colors.red, size: 16),
+                              label: const Text(
+                                'ตำแหน่งปัจจุบัน',
+                                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                              ),
+                              backgroundColor: Colors.white,
+                              elevation: 3,
+                              shadowColor: Colors.black26,
+                              onPressed: _getCurrentLocation,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                   
                   // Search Results List
                   if (_showSearchResults && _searchResults.isNotEmpty)
@@ -549,36 +655,39 @@ class _SelectLocationScreenState extends ConsumerState<SelectLocationScreen> {
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: widget.isPickup 
-                              ? Colors.red.withValues(alpha: 0.1) 
-                              : Colors.blueGrey.withValues(alpha: 0.1),
+                          color: widget.isPickingForProfile
+                              ? const Color(0xFF0044C9).withValues(alpha: 0.1)
+                              : (widget.isPickup 
+                                  ? Colors.red.withValues(alpha: 0.1) 
+                                  : Colors.blueGrey.withValues(alpha: 0.1)),
                           shape: BoxShape.circle,
                         ),
                         child: Icon(
-                          widget.isPickup ? Icons.location_on : Icons.flag,
-                          color: widget.isPickup ? Colors.red : Colors.blueGrey[700],
+                          widget.isPickingForProfile
+                              ? Icons.home
+                              : (widget.isPickup ? Icons.location_on : Icons.flag),
+                          color: widget.isPickingForProfile
+                              ? const Color(0xFF0044C9)
+                              : (widget.isPickup ? Colors.red : const Color(0xFF1E293B)),
                           size: 24,
                         ),
                       ),
                       const SizedBox(width: 16),
                       Expanded(
                         child: _isGeocoding
-                            ? Row(
+                            ? const Row(
                                 children: [
-                                  const SizedBox(
+                                  SizedBox(
                                     width: 16,
                                     height: 16,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      valueColor: AlwaysStoppedAnimation<Color>(Colors.grey),
-                                    ),
+                                    child: CircularProgressIndicator(strokeWidth: 2),
                                   ),
-                                  const SizedBox(width: 10),
+                                  SizedBox(width: 12),
                                   Text(
-                                    'กำลังโหลดพิกัด...',
+                                    'กำลังดึงข้อมูลตำแหน่ง...',
                                     style: TextStyle(
-                                      color: Colors.grey[500],
-                                      fontSize: 16,
+                                      color: Color(0xFF64748B),
+                                      fontSize: 14,
                                     ),
                                   ),
                                 ],
@@ -606,15 +715,22 @@ class _SelectLocationScreenState extends ConsumerState<SelectLocationScreen> {
                       onPressed: _isGeocoding
                           ? null
                           : () {
-                              // Save state to provider
-                              if (widget.isPickup) {
-                                ref.read(requestDriverControllerProvider.notifier)
-                                    .setPickup(_resolvedAddress, _currentLatLng);
+                              if (widget.isPickingForProfile) {
+                                Navigator.of(context).pop({
+                                  'address': _resolvedAddress,
+                                  'latLng': _currentLatLng,
+                                });
                               } else {
-                                ref.read(requestDriverControllerProvider.notifier)
-                                    .setDropoff(_resolvedAddress, _currentLatLng);
+                                // Save state to provider
+                                if (widget.isPickup) {
+                                  ref.read(requestDriverControllerProvider.notifier)
+                                      .setPickup(_resolvedAddress, _currentLatLng);
+                                } else {
+                                  ref.read(requestDriverControllerProvider.notifier)
+                                      .setDropoff(_resolvedAddress, _currentLatLng);
+                                }
+                                Navigator.of(context).pop();
                               }
-                              Navigator.of(context).pop();
                             },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: themeColor,

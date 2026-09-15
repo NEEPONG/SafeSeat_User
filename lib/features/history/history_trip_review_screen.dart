@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:safeseat_mini/core/theme/app_theme.dart';
+import 'package:safeseat_mini/core/utils/app_feedback.dart';
+import 'package:safeseat_mini/core/utils/validators.dart';
+import 'package:safeseat_mini/core/widgets/driver_avatar.dart';
 import 'package:safeseat_mini/data/models/request_driver_model.dart';
 import 'package:safeseat_mini/data/models/review_model.dart';
 import 'package:safeseat_mini/features/history/controllers/history_controller.dart';
@@ -20,6 +23,7 @@ class HistoryTripReviewScreen extends ConsumerStatefulWidget {
 }
 
 class _HistoryTripReviewScreenState extends ConsumerState<HistoryTripReviewScreen> {
+  final _formKey = GlobalKey<FormState>();
   int _driverRating = 0;
   int _coDriverRating = 0;
   final TextEditingController _driverCommentController = TextEditingController();
@@ -96,13 +100,14 @@ class _HistoryTripReviewScreenState extends ConsumerState<HistoryTripReviewScree
   Widget _buildReviewCard({
     required String name,
     required String role,
-    required String avatarUrl,
+    String? avatarUrl,
     required String ratingLabel,
     required int currentRating,
     required Function(int) onRatingChanged,
     required TextEditingController controller,
     required String badgeText,
     required Color badgeColor,
+    String? Function(String?)? validator,
   }) {
     return Container(
       padding: const EdgeInsets.all(20.0),
@@ -124,33 +129,13 @@ class _HistoryTripReviewScreenState extends ConsumerState<HistoryTripReviewScree
           // Profile section
           Row(
             children: [
-              Stack(
-                children: [
-                  CircleAvatar(
-                    radius: 32,
-                    backgroundColor: Colors.grey[200],
-                    backgroundImage: NetworkImage(avatarUrl),
-                  ),
-                  Positioned(
-                    bottom: 0,
-                    right: 0,
-                    child: Container(
-                      padding: const EdgeInsets.all(4),
-                      decoration: BoxDecoration(
-                        color: badgeColor,
-                        shape: BoxShape.circle,
-                      ),
-                      child: Text(
-                        badgeText,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 8,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
+              DriverAvatar(
+                imageUrl: avatarUrl,
+                fallbackName: name,
+                radius: 30,
+                badgeText: badgeText,
+                badgeColor: badgeColor,
+                defaultIcon: role.toLowerCase().contains('co') ? Icons.motorcycle : Icons.person,
               ),
               const SizedBox(width: 16),
               Expanded(
@@ -203,10 +188,11 @@ class _HistoryTripReviewScreenState extends ConsumerState<HistoryTripReviewScree
           ),
           const SizedBox(height: 8),
           // Textfield
-          TextField(
+          TextFormField(
             controller: controller,
             maxLines: 3,
             readOnly: isReadOnly,
+            validator: validator,
             decoration: InputDecoration(
               hintText: 'บอกเราเกี่ยวกับประสบการณ์ของคุณ',
               hintStyle: const TextStyle(
@@ -224,8 +210,21 @@ class _HistoryTripReviewScreenState extends ConsumerState<HistoryTripReviewScree
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(16),
-                borderSide: BorderSide(
+                borderSide: const BorderSide(
                   color: AppTheme.primaryColor,
+                  width: 1.5,
+                ),
+              ),
+              errorBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: const BorderSide(
+                  color: Colors.red,
+                ),
+              ),
+              focusedErrorBorder: const OutlineInputBorder(
+                borderRadius: BorderRadius.all(Radius.circular(16)),
+                borderSide: BorderSide(
+                  color: Colors.red,
                   width: 1.5,
                 ),
               ),
@@ -298,8 +297,10 @@ class _HistoryTripReviewScreenState extends ConsumerState<HistoryTripReviewScree
             Expanded(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
-                child: Column(
-                  children: [
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    children: [
                     // 1. Trip Locations Card
                     Container(
                       padding: const EdgeInsets.all(16.0),
@@ -409,7 +410,7 @@ class _HistoryTripReviewScreenState extends ConsumerState<HistoryTripReviewScree
                     _buildReviewCard(
                       name: driverName,
                       role: 'Driver',
-                      avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150',
+                      avatarUrl: widget.trip.leader?.resolvedImageUrl,
                       ratingLabel: 'Rate your driver',
                       currentRating: _driverRating,
                       onRatingChanged: (val) {
@@ -420,6 +421,7 @@ class _HistoryTripReviewScreenState extends ConsumerState<HistoryTripReviewScree
                       controller: _driverCommentController,
                       badgeText: 'D1',
                       badgeColor: const Color(0xFF2563EB),
+                      validator: AppValidators.validateReviewComment,
                     ),
                     const SizedBox(height: 16),
 
@@ -427,7 +429,7 @@ class _HistoryTripReviewScreenState extends ConsumerState<HistoryTripReviewScree
                     _buildReviewCard(
                       name: coDriverName,
                       role: 'Co-driver',
-                      avatarUrl: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150',
+                      avatarUrl: widget.trip.follower?.resolvedImageUrl,
                       ratingLabel: 'Rate your co-driver',
                       currentRating: _coDriverRating,
                       onRatingChanged: (val) {
@@ -438,12 +440,14 @@ class _HistoryTripReviewScreenState extends ConsumerState<HistoryTripReviewScree
                       controller: _coDriverCommentController,
                       badgeText: 'D2',
                       badgeColor: const Color(0xFF475569),
+                      validator: AppValidators.validateReviewComment,
                     ),
                     const SizedBox(height: 16),
                   ],
                 ),
               ),
             ),
+          ),
             // Bottom Submit Button
             if (!isReadOnly)
               Container(
@@ -462,56 +466,51 @@ class _HistoryTripReviewScreenState extends ConsumerState<HistoryTripReviewScree
                 width: double.infinity,
                 height: 52,
                 child: ElevatedButton.icon(
-                  onPressed: (_driverRating == 0 && _coDriverRating == 0)
-                      ? null
-                      : () async {
-                          if (!context.mounted) return;
-                          // Show loading indicator
-                          showDialog(
-                            context: context,
-                            barrierDismissible: false,
-                            builder: (context) => const Center(
-                              child: CircularProgressIndicator(),
-                            ),
-                          );
+                  onPressed: () async {
+                    if (_driverRating == 0 || _coDriverRating == 0) {
+                      AppSnackBar.showWarning(
+                        context,
+                        'กรุณาเลือกคะแนนความพึงพอใจให้ครบทั้งสองท่านก่อนยืนยัน',
+                      );
+                      return;
+                    }
 
-                          try {
-                            await ref.read(historyReviewControllerProvider.notifier).submitTripReviews(
-                              requestId: widget.trip.requestId,
-                              leaderUsername: widget.trip.leader?.username,
-                              leaderRating: _driverRating,
-                              leaderComment: _driverCommentController.text,
-                              followerUsername: widget.trip.follower?.username,
-                              followerRating: _coDriverRating,
-                              followerComment: _coDriverCommentController.text,
-                            );
+                    if (!_formKey.currentState!.validate()) {
+                      return;
+                    }
 
-                            if (!context.mounted) return;
-                            // Hide loading indicator
-                            Navigator.of(context).pop();
+                    if (!context.mounted) return;
+                    AppDialog.showLoading(context, message: 'กำลังบันทึกคะแนนรีวิว...');
 
-                            // Show success message
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('ส่งรีวิวสำเร็จ ขอบคุณสำหรับความคิดเห็นของคุณ'),
-                                backgroundColor: Colors.green,
-                              ),
-                            );
-                            Navigator.of(context).pop();
-                          } catch (e) {
-                            if (!context.mounted) return;
-                            // Hide loading indicator
-                            Navigator.of(context).pop();
-                            
-                            // Show error message
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('เกิดข้อผิดพลาดในการส่งรีวิว: $e'),
-                                backgroundColor: Colors.red,
-                              ),
-                            );
-                          }
-                        },
+                    try {
+                      await ref.read(historyReviewControllerProvider.notifier).submitTripReviews(
+                        requestId: widget.trip.requestId,
+                        leaderUsername: widget.trip.leader?.username,
+                        leaderRating: _driverRating,
+                        leaderComment: _driverCommentController.text,
+                        followerUsername: widget.trip.follower?.username,
+                        followerRating: _coDriverRating,
+                        followerComment: _coDriverCommentController.text,
+                      );
+
+                      if (!context.mounted) return;
+                      AppDialog.hideLoading(context);
+
+                      AppSnackBar.showSuccess(
+                        context,
+                        'ส่งรีวิวสำเร็จ ขอบคุณสำหรับความคิดเห็นของคุณ',
+                      );
+                      Navigator.of(context).pop();
+                    } catch (e) {
+                      if (!context.mounted) return;
+                      AppDialog.hideLoading(context);
+                      
+                      AppSnackBar.showError(
+                        context,
+                        'เกิดข้อผิดพลาดในการส่งรีวิว: $e',
+                      );
+                    }
+                  },
                   icon: const Icon(Icons.send_rounded, color: Colors.white),
                   label: const Text(
                     'ส่งรีวิว',

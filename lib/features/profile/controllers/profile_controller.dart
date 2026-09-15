@@ -47,6 +47,22 @@ class ProfileController extends Notifier<bool> {
     }
   }
 
+  /// เติมเงินเข้ากระเป๋า SafeSeat Wallet
+  Future<bool> topUpWallet(String phoneNo, double amount) async {
+    state = true;
+    try {
+      final repository = ref.read(profileRepositoryProvider);
+      final updatedUser = await repository.topUpWallet(phoneNo, amount);
+
+      ref.read(userProvider.notifier).setUser(updatedUser);
+      state = false;
+      return true;
+    } catch (e) {
+      state = false;
+      return false;
+    }
+  }
+
   /// อัปโหลดรูปภาพ (ถ้ามี) และส่งข้อมูลอัปเดตโปรไฟล์ไปยังเซิร์ฟเวอร์
   Future<bool> editProfileWithImage({
     required UserModel currentUser,

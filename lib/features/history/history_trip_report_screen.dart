@@ -2,6 +2,9 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:safeseat_mini/core/utils/app_feedback.dart';
+import 'package:safeseat_mini/core/utils/validators.dart';
+import 'package:safeseat_mini/core/widgets/driver_avatar.dart';
 import 'package:safeseat_mini/data/models/request_driver_model.dart';
 import 'package:safeseat_mini/features/history/controllers/history_controller.dart';
 
@@ -19,17 +22,47 @@ class _HistoryTripReportScreenState extends ConsumerState<HistoryTripReportScree
   final _descriptionController = TextEditingController();
   
   String? _selectedCategory;
-  String? _selectedTarget = 'ทั้งหมด';
+  String _selectedTarget = 'ALL';
   final List<File> _selectedImages = [];
   final _imagePicker = ImagePicker();
 
   final List<String> _categories = [
-    'ขับรถเร็วเกินกำหนด/อันตราย',
-    'พูดจาไม่สุภาพ/คุกคาม',
-    'ขอเก็บค่าบริการเพิ่มจากที่กำหนด',
-    'รถยนต์มีปัญหา/ไม่ตรงตามที่ระบุ',
+    'พฤติกรรมไม่เหมาะสม',
+    'ขับรถอันตราย',
+    'เรียกเก็บเงินเกินจริง',
+    'ทรัพย์สินเสียหาย',
     'อื่นๆ (โปรดระบุในคำอธิบาย)',
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    // Initialize default target based on available drivers
+    final trip = widget.trip;
+    if (trip.leader != null && trip.follower != null) {
+      _selectedTarget = 'ALL';
+    } else if (trip.leader != null) {
+      _selectedTarget = 'LEADER';
+    } else if (trip.follower != null) {
+      _selectedTarget = 'FOLLOWER';
+    } else {
+      _selectedTarget = 'ALL';
+    }
+
+    _checkExistingReport();
+  }
+
+  Future<void> _checkExistingReport() async {
+    try {
+      final status = await ref
+          .read(historyReportControllerProvider.notifier)
+          .checkReportStatus(widget.trip.requestId);
+      if (status['hasReported'] == true && mounted) {
+        AppSnackBar.showWarning(context, 'รายการนี้เคยถูกรายงานไปแล้ว ไม่สามารถรายงานซ้ำได้');
+        Navigator.of(context).pop();
+      }
+    } catch (_) {}
+  }
 
   @override
   void dispose() {
@@ -39,9 +72,7 @@ class _HistoryTripReportScreenState extends ConsumerState<HistoryTripReportScree
 
   Future<void> _pickImage() async {
     if (_selectedImages.length >= 5) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('คุณสามารถอัปโหลดรูปภาพได้สูงสุด 5 รูปภาพ')),
-      );
+      AppSnackBar.showWarning(context, 'คุณสามารถอัปโหลดรูปภาพหลักฐานได้สูงสุด 5 รูปภาพ');
       return;
     }
 
@@ -52,6 +83,19 @@ class _HistoryTripReportScreenState extends ConsumerState<HistoryTripReportScree
       );
 
       if (pickedFile != null) {
+        final path = pickedFile.path.toLowerCase();
+        if (!path.endsWith('.png') &&
+            !path.endsWith('.jpg') &&
+            !path.endsWith('.jpeg')) {
+          if (mounted) {
+            AppSnackBar.showWarning(
+              context,
+              'รองรับเฉพาะไฟล์รูปภาพนามสกุล .png, .jpg, .jpeg เท่านั้น',
+            );
+          }
+          return;
+        }
+
         setState(() {
           _selectedImages.add(File(pickedFile.path));
         });
@@ -68,37 +112,51 @@ class _HistoryTripReportScreenState extends ConsumerState<HistoryTripReportScree
   }
 
   Future<void> _submitReport() async {
-    if (_selectedCategory == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('กรุณาเลือกประเภทเหตุการณ์')),
+    if (_selectedCategory == null || !_formKey.currentState!.validate()) {
+      AppSnackBar.showWarning(
+        context,
+        'กรุณาเลือกประเภทปัญหาและกรอกรายละเอียดให้ถูกต้องครบถ้วน',
       );
       return;
     }
 
-    if (_descriptionController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('กรุณาระบุคำอธิบายเหตุการณ์')),
-      );
-      return;
-    }
-
-    // Show loading indicator
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => const Center(
-        child: CircularProgressIndicator(),
-      ),
-    );
+    // Show standardized loading indicator
+    AppDialog.showLoading(context, message: 'กำลังส่งข้อมูลรายงานและอัปโหลดหลักฐาน...');
 
     try {
       // 1. Prepare report index based on selected category
       final reportIndex = _categories.indexOf(_selectedCategory!);
 
-      // Append target info to detail if specific target is selected
+      // Collect target driver ID(s)
+      final List<String> targetDriverIds = [];
+      final leader = widget.trip.leader;
+      final follower = widget.trip.follower;
+
+      if (_selectedTarget == 'ALL') {
+        if (leader != null && leader.username.isNotEmpty) {
+          targetDriverIds.add(leader.username);
+        }
+        if (follower != null && follower.username.isNotEmpty) {
+          targetDriverIds.add(follower.username);
+        }
+      } else if (_selectedTarget == 'LEADER') {
+        if (leader != null && leader.username.isNotEmpty) {
+          targetDriverIds.add(leader.username);
+        }
+      } else if (_selectedTarget == 'FOLLOWER') {
+        if (follower != null && follower.username.isNotEmpty) {
+          targetDriverIds.add(follower.username);
+        }
+      }
+
+      // Format report detail: [ID: id1,id2] detail text
       String detailText = _descriptionController.text.trim();
-      if (_selectedTarget != null && _selectedTarget != 'ทั้งหมด') {
-        detailText = '[เป้าหมาย: $_selectedTarget] $detailText';
+      if (targetDriverIds.isNotEmpty) {
+        detailText = '[ID: ${targetDriverIds.join(',')}] $detailText';
+      }
+      // Ensure maximum length of 255 characters for database varchar(255)
+      if (detailText.length > 255) {
+        detailText = detailText.substring(0, 255);
       }
 
       // 2. Submit via historyReportControllerProvider
@@ -111,96 +169,34 @@ class _HistoryTripReportScreenState extends ConsumerState<HistoryTripReportScree
       );
 
       if (!mounted) return;
-      Navigator.of(context).pop(); // pop loading indicator
+      AppDialog.hideLoading(context);
 
       if (success) {
+        ref.invalidate(userReportsListProvider);
         // Show success dialog
-        showDialog(
+        AppDialog.showSuccess(
           context: context,
-          barrierDismissible: false,
-          builder: (context) => AlertDialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(24),
-            ),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const SizedBox(height: 16),
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.green[50],
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.check_circle_rounded,
-                    color: Colors.green,
-                    size: 54,
-                  ),
-                ),
-                const SizedBox(height: 20),
-                const Text(
-                  'ส่งรายงานสำเร็จ',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF0F172A),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                const Text(
-                  'ระบบได้รับข้อมูลรายงานความไม่สะดวกของคุณแล้ว ทางเจ้าหน้าที่จะรีบทำการตรวจสอบเหตุการณ์และดำเนินการต่อไปโดยเร็วที่สุด',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Color(0xFF64748B),
-                    height: 1.5,
-                  ),
-                ),
-                const SizedBox(height: 24),
-                SizedBox(
-                  width: double.infinity,
-                  height: 48,
-                  child: ElevatedButton(
-                    onPressed: () {
-                      Navigator.of(context).pop(); // pop dialog
-                      Navigator.of(context).pop(); // pop report screen
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF0D47A1),
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      elevation: 0,
-                    ),
-                    child: const Text(
-                      'ตกลง',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
+          title: 'ส่งรายงานสำเร็จ',
+          message:
+              'ระบบได้รับข้อมูลรายงานความไม่สะดวกของคุณแล้ว ทางเจ้าหน้าที่จะรีบทำการตรวจสอบเหตุการณ์และดำเนินการต่อไปโดยเร็วที่สุด',
+          buttonText: 'ตกลง',
+          onDismiss: () {
+            if (mounted) {
+              Navigator.of(context).pop(true); // pop report screen with success
+            }
+          },
         );
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('ส่งรายงานไม่สำเร็จ กรุณาลองใหม่อีกครั้ง'),
-            backgroundColor: Colors.red,
-          ),
+        AppSnackBar.showError(
+          context,
+          'ส่งรายงานไม่สำเร็จ กรุณาลองใหม่อีกครั้ง',
         );
       }
     } catch (e) {
       if (mounted) {
-        Navigator.of(context).pop(); // pop loading indicator
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('เกิดข้อผิดพลาด: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        AppDialog.hideLoading(context);
+        final errorMsg = e.toString().replaceFirst('Exception: ', '');
+        AppSnackBar.showError(context, errorMsg);
       }
     }
   }
@@ -216,19 +212,29 @@ class _HistoryTripReportScreenState extends ConsumerState<HistoryTripReportScree
     const dropoffPoint = 'บ้านนิ่มในเชียงใหม่แสนไกล';
 
     // Build the driver targets list based on available drivers
-    final List<DropdownMenuItem<String>> targetItems = [
-      const DropdownMenuItem(value: 'ทั้งหมด', child: Text('ทั้งหมด')),
-    ];
+    final List<DropdownMenuItem<String>> targetItems = [];
+    if (trip.leader != null && trip.follower != null) {
+      targetItems.add(const DropdownMenuItem(
+        value: 'ALL',
+        child: Text('ทุกคนในทริปนี้ (ทั้ง 2 คน)'),
+      ));
+    }
     if (trip.leader != null) {
       targetItems.add(DropdownMenuItem(
-        value: 'หัวหน้าทีม (${trip.leader!.firstname})',
-        child: Text('หัวหน้าทีม (${trip.leader!.firstname})'),
+        value: 'LEADER',
+        child: Text('คนขับหลัก (${trip.leader!.firstname} ${trip.leader!.lastname})'),
       ));
     }
     if (trip.follower != null) {
       targetItems.add(DropdownMenuItem(
-        value: 'ผู้ติดตาม (${trip.follower!.firstname})',
-        child: Text('ผู้ติดตาม (${trip.follower!.firstname})'),
+        value: 'FOLLOWER',
+        child: Text('ผู้ช่วยคนขับ (${trip.follower!.firstname} ${trip.follower!.lastname})'),
+      ));
+    }
+    if (targetItems.isEmpty) {
+      targetItems.add(const DropdownMenuItem(
+        value: 'ALL',
+        child: Text('ผู้ขับรถในทริปนี้'),
       ));
     }
 
@@ -397,30 +403,12 @@ class _HistoryTripReportScreenState extends ConsumerState<HistoryTripReportScree
                       if (trip.leader != null) ...[
                         ListTile(
                           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                          leading: Stack(
-                            children: [
-                              CircleAvatar(
-                                radius: 24,
-                                backgroundColor: Colors.grey[200],
-                                child: const Icon(Icons.person, color: Colors.grey),
-                              ),
-                              Positioned(
-                                bottom: 0,
-                                right: 0,
-                                child: Container(
-                                  padding: const EdgeInsets.all(3),
-                                  decoration: const BoxDecoration(
-                                    color: Color(0xFF0D47A1),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: const Icon(
-                                    Icons.directions_car,
-                                    size: 10,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              ),
-                            ],
+                          leading: DriverAvatar(
+                            imageUrl: trip.leader!.resolvedImageUrl,
+                            fallbackName: '${trip.leader!.firstname} ${trip.leader!.lastname}',
+                            radius: 22,
+                            badgeText: 'D1',
+                            badgeColor: const Color(0xFF0D47A1),
                           ),
                           title: Text(
                             '${trip.leader!.firstname} ${trip.leader!.lastname}',
@@ -444,19 +432,19 @@ class _HistoryTripReportScreenState extends ConsumerState<HistoryTripReportScree
                               borderRadius: BorderRadius.circular(20),
                               border: Border.all(color: const Color(0xFFE2E8F0)),
                             ),
-                            child: const Row(
+                            child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Text(
-                                  '4.7',
-                                  style: TextStyle(
+                                  trip.leader!.rating != null ? trip.leader!.rating!.toStringAsFixed(1) : '5.0',
+                                  style: const TextStyle(
                                     fontSize: 13,
                                     fontWeight: FontWeight.bold,
                                     color: Color(0xFF0F172A),
                                   ),
                                 ),
-                                SizedBox(width: 4),
-                                Icon(Icons.star, color: Colors.amber, size: 14),
+                                const SizedBox(width: 4),
+                                const Icon(Icons.star, color: Colors.amber, size: 14),
                               ],
                             ),
                           ),
@@ -467,30 +455,13 @@ class _HistoryTripReportScreenState extends ConsumerState<HistoryTripReportScree
                           const Divider(height: 1, indent: 16, endIndent: 16, color: Color(0xFFE2E8F0)),
                         ListTile(
                           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                          leading: Stack(
-                            children: [
-                              CircleAvatar(
-                                radius: 24,
-                                backgroundColor: Colors.grey[200],
-                                child: const Icon(Icons.person, color: Colors.grey),
-                              ),
-                              Positioned(
-                                bottom: 0,
-                                right: 0,
-                                child: Container(
-                                  padding: const EdgeInsets.all(3),
-                                  decoration: const BoxDecoration(
-                                    color: Color(0xFF64748B),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: const Icon(
-                                    Icons.two_wheeler,
-                                    size: 10,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              ),
-                            ],
+                          leading: DriverAvatar(
+                            imageUrl: trip.follower!.resolvedImageUrl,
+                            fallbackName: '${trip.follower!.firstname} ${trip.follower!.lastname}',
+                            radius: 22,
+                            badgeText: 'D2',
+                            badgeColor: const Color(0xFF64748B),
+                            defaultIcon: Icons.motorcycle,
                           ),
                           title: Text(
                             '${trip.follower!.firstname} ${trip.follower!.lastname}',
@@ -514,19 +485,19 @@ class _HistoryTripReportScreenState extends ConsumerState<HistoryTripReportScree
                               borderRadius: BorderRadius.circular(20),
                               border: Border.all(color: const Color(0xFFE2E8F0)),
                             ),
-                            child: const Row(
+                            child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Text(
-                                  '4.9',
-                                  style: TextStyle(
+                                  trip.follower!.rating != null ? trip.follower!.rating!.toStringAsFixed(1) : '5.0',
+                                  style: const TextStyle(
                                     fontSize: 13,
                                     fontWeight: FontWeight.bold,
                                     color: Color(0xFF0F172A),
                                   ),
                                 ),
-                                SizedBox(width: 4),
-                                Icon(Icons.star, color: Colors.amber, size: 14),
+                                const SizedBox(width: 4),
+                                const Icon(Icons.star, color: Colors.amber, size: 14),
                               ],
                             ),
                           ),
@@ -604,7 +575,7 @@ class _HistoryTripReportScreenState extends ConsumerState<HistoryTripReportScree
                   items: targetItems,
                   onChanged: (val) {
                     setState(() {
-                      _selectedTarget = val;
+                      _selectedTarget = val ?? 'ALL';
                     });
                   },
                 ),
@@ -622,6 +593,8 @@ class _HistoryTripReportScreenState extends ConsumerState<HistoryTripReportScree
                 TextFormField(
                   controller: _descriptionController,
                   maxLines: 4,
+                  maxLength: 200,
+                  validator: AppValidators.validateReportDetail,
                   decoration: InputDecoration(
                     fillColor: Colors.white,
                     filled: true,
@@ -635,6 +608,14 @@ class _HistoryTripReportScreenState extends ConsumerState<HistoryTripReportScree
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(16),
                       borderSide: const BorderSide(color: Color(0xFF0D47A1), width: 1.5),
+                    ),
+                    errorBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: const BorderSide(color: Colors.red),
+                    ),
+                    focusedErrorBorder: const OutlineInputBorder(
+                      borderRadius: BorderRadius.all(Radius.circular(16)),
+                      borderSide: BorderSide(color: Colors.red, width: 1.5),
                     ),
                   ),
                 ),

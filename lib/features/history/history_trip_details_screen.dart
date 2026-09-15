@@ -3,11 +3,14 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:safeseat_mini/core/theme/app_theme.dart';
+import 'package:safeseat_mini/core/widgets/driver_avatar.dart';
+import 'package:safeseat_mini/data/models/driver_report_model.dart';
 import 'package:safeseat_mini/data/models/request_driver_model.dart';
 import 'package:safeseat_mini/data/models/review_model.dart';
 import 'package:safeseat_mini/features/history/controllers/history_controller.dart';
 import 'package:safeseat_mini/features/history/history_trip_review_screen.dart';
 import 'package:safeseat_mini/features/history/history_trip_report_screen.dart';
+import 'package:safeseat_mini/features/history/history_report_details_screen.dart';
 
 class HistoryTripDetailsScreen extends ConsumerStatefulWidget {
   final RequestDriverModel trip;
@@ -21,11 +24,14 @@ class HistoryTripDetailsScreen extends ConsumerStatefulWidget {
 class _HistoryTripDetailsScreenState extends ConsumerState<HistoryTripDetailsScreen> {
   bool _hasReviewed = false;
   List<ReviewModel> _existingReviews = [];
+  bool _hasReported = false;
+  DriverReportModel? _existingReport;
 
   @override
   void initState() {
     super.initState();
     _checkReviewStatus();
+    _checkReportStatus();
   }
 
   Future<void> _checkReviewStatus() async {
@@ -44,9 +50,26 @@ class _HistoryTripDetailsScreenState extends ConsumerState<HistoryTripDetailsScr
     }
   }
 
+  Future<void> _checkReportStatus() async {
+    try {
+      final checkResult = await ref
+          .read(historyReportControllerProvider.notifier)
+          .checkReportStatus(widget.trip.requestId);
+      if (mounted) {
+        setState(() {
+          _hasReported = checkResult['hasReported'] ?? false;
+          _existingReport = checkResult['report'] as DriverReportModel?;
+        });
+      }
+    } catch (e) {
+      // Ignored
+    }
+  }
+
   String _formatDateTime(String dateTimeStr) {
-    final parsed = DateTime.tryParse(dateTimeStr);
+    var parsed = DateTime.tryParse(dateTimeStr);
     if (parsed == null) return dateTimeStr;
+    parsed = parsed.toLocal();
     final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     
     // Safety check for month range
@@ -80,27 +103,40 @@ class _HistoryTripDetailsScreenState extends ConsumerState<HistoryTripDetailsScr
     final leaderName = trip.leader != null 
         ? '${trip.leader!.firstname} ${trip.leader!.lastname}'
         : '';
-    final leaderSubtitle = trip.leader != null ? 'Driver Your Car' : '';
+    final leaderSubtitle = trip.leader != null ? 'คนขับหลัก • ขับรถให้คุณ' : '';
     
     // Follower info check
     final followerName = trip.follower != null
         ? '${trip.follower!.firstname} ${trip.follower!.lastname}'
         : '';
-    final followerSubtitle = trip.follower != null ? 'Driver1 Follower' : '';
+    final followerSubtitle = trip.follower != null
+        ? (trip.follower!.vehicleSummary != 'ไม่ระบุยานพาหนะ'
+            ? 'ขับตาม: ${trip.follower!.vehicleSummary}'
+            : 'คนขับผู้ช่วย (ขับตาม)')
+        : '';
 
     final bool hasDrivers = trip.leader != null && trip.requestStatus != 'ยกเลิก';
     final int driverCount = (trip.leader != null ? 1 : 0) + (trip.follower != null ? 1 : 0);
 
     // Car details check
-    final carBrand = trip.userCar != null ? trip.userCar!.carBrand : 'Tesla';
-    final carModel = trip.userCar != null ? trip.userCar!.carModel : 'Model 3';
-    final carPlate = trip.userCar != null ? trip.userCar!.carPlate : 'ABC-1234';
-    final carColor = trip.userCar != null ? trip.userCar!.carColor : 'สีเทาเข้ม (Dark Grey)';
+    final hasUserCar = trip.userCar != null;
+    final carBrand = trip.userCar?.carBrand ?? '';
+    final carModel = trip.userCar?.carModel ?? '';
+    final carPlate = trip.userCar?.carPlate ?? '';
+    final carColor = trip.userCar?.carColor ?? '';
+
+    final carTitle = hasUserCar && (carBrand.isNotEmpty || carModel.isNotEmpty)
+        ? '$carBrand $carModel'.trim()
+        : (hasUserCar ? 'รถยนต์ของคุณ' : 'ไม่พบข้อมูลยานพาหนะ');
+
+    final carSubtitle = hasUserCar && carColor.isNotEmpty
+        ? 'สี $carColor'
+        : (hasUserCar ? 'รถยนต์ส่วนบุคคล' : 'ไม่มีข้อมูลรายละเอียดรถ');
 
     final pickupPoint = trip.note != null && trip.note!.isNotEmpty
         ? trip.note!
-        : 'ผับคุณหนูนิ่มประจำเชียงใหม่';
-    const dropoffPoint = 'บ้านนิ่มในเชียงใหม่แสนไกล';
+        : 'จุดรับ (${trip.pickupLatitude.toStringAsFixed(4)}, ${trip.pickupLongitude.toStringAsFixed(4)})';
+    final dropoffPoint = 'จุดส่ง (${trip.dropoffLatitude.toStringAsFixed(4)}, ${trip.dropoffLongitude.toStringAsFixed(4)})';
 
     final paymentMethodText = trip.paymentMethod == 2
         ? 'ชำระด้วย SafeSeat Wallet'
@@ -392,35 +428,12 @@ class _HistoryTripDetailsScreenState extends ConsumerState<HistoryTripDetailsScr
                               ),
                               child: Column(
                                 children: [
-                                  Stack(
-                                    children: [
-                                      CircleAvatar(
-                                        radius: 36,
-                                        backgroundColor: Colors.grey[200],
-                                        backgroundImage: const NetworkImage(
-                                          'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150',
-                                        ),
-                                      ),
-                                      Positioned(
-                                        bottom: 0,
-                                        right: 0,
-                                        child: Container(
-                                          padding: const EdgeInsets.all(4),
-                                          decoration: const BoxDecoration(
-                                            color: Color(0xFF2563EB),
-                                            shape: BoxShape.circle,
-                                          ),
-                                          child: const Text(
-                                            'D1',
-                                            style: TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 9,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ],
+                                  DriverAvatar(
+                                    imageUrl: trip.leader?.resolvedImageUrl,
+                                    fallbackName: leaderName,
+                                    radius: 36,
+                                    badgeText: 'D1',
+                                    badgeColor: const Color(0xFF2563EB),
                                   ),
                                   const SizedBox(height: 12),
                                   Text(
@@ -451,12 +464,12 @@ class _HistoryTripDetailsScreenState extends ConsumerState<HistoryTripDetailsScr
                                     ),
                                     child: Row(
                                       mainAxisSize: MainAxisSize.min,
-                                      children: const [
-                                        Icon(Icons.star_rounded, color: Colors.amber, size: 16),
-                                        SizedBox(width: 4),
+                                      children: [
+                                        const Icon(Icons.star_rounded, color: Colors.amber, size: 16),
+                                        const SizedBox(width: 4),
                                         Text(
-                                          '4.9',
-                                          style: TextStyle(
+                                          trip.leader?.rating != null ? trip.leader!.rating!.toStringAsFixed(1) : '5.0',
+                                          style: const TextStyle(
                                             fontSize: 11,
                                             fontWeight: FontWeight.bold,
                                             color: Color(0xFF475569),
@@ -489,35 +502,13 @@ class _HistoryTripDetailsScreenState extends ConsumerState<HistoryTripDetailsScr
                                     ),
                                     child: Column(
                                       children: [
-                                        Stack(
-                                          children: [
-                                            CircleAvatar(
-                                              radius: 36,
-                                              backgroundColor: Colors.grey[200],
-                                              backgroundImage: const NetworkImage(
-                                                'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150',
-                                              ),
-                                            ),
-                                            Positioned(
-                                              bottom: 0,
-                                              right: 0,
-                                              child: Container(
-                                                padding: const EdgeInsets.all(4),
-                                                decoration: const BoxDecoration(
-                                                  color: Color(0xFF475569),
-                                                  shape: BoxShape.circle,
-                                                ),
-                                                child: const Text(
-                                                  'D2',
-                                                  style: TextStyle(
-                                                    color: Colors.white,
-                                                    fontSize: 9,
-                                                    fontWeight: FontWeight.bold,
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                          ],
+                                        DriverAvatar(
+                                          imageUrl: trip.follower?.resolvedImageUrl,
+                                          fallbackName: followerName,
+                                          radius: 36,
+                                          badgeText: 'D2',
+                                          badgeColor: const Color(0xFF475569),
+                                          defaultIcon: Icons.motorcycle,
                                         ),
                                         const SizedBox(height: 12),
                                         Text(
@@ -548,12 +539,12 @@ class _HistoryTripDetailsScreenState extends ConsumerState<HistoryTripDetailsScr
                                           ),
                                           child: Row(
                                             mainAxisSize: MainAxisSize.min,
-                                            children: const [
-                                              Icon(Icons.star_rounded, color: Colors.amber, size: 16),
-                                              SizedBox(width: 4),
+                                            children: [
+                                              const Icon(Icons.star_rounded, color: Colors.amber, size: 16),
+                                              const SizedBox(width: 4),
                                               Text(
-                                                '4.7',
-                                                style: TextStyle(
+                                                trip.follower?.rating != null ? trip.follower!.rating!.toStringAsFixed(1) : '5.0',
+                                                style: const TextStyle(
                                                   fontSize: 11,
                                                   fontWeight: FontWeight.bold,
                                                   color: Color(0xFF475569),
@@ -695,35 +686,41 @@ class _HistoryTripDetailsScreenState extends ConsumerState<HistoryTripDetailsScr
                           children: [
                             Row(
                               children: [
-                                Text(
-                                  '$carBrand $carModel',
-                                  style: const TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                    color: Color(0xFF0F172A),
+                                Expanded(
+                                  child: Text(
+                                    carTitle,
+                                    style: const TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFF0F172A),
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
-                                const SizedBox(width: 8),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFF1F5F9),
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  child: Text(
-                                    carPlate,
-                                    style: const TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.bold,
-                                      color: Color(0xFF475569),
+                                if (carPlate.isNotEmpty) ...[
+                                  const SizedBox(width: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFF1F5F9),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: Text(
+                                      carPlate,
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                        color: Color(0xFF475569),
+                                      ),
                                     ),
                                   ),
-                                ),
+                                ],
                               ],
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              carColor,
+                              carSubtitle,
                               style: const TextStyle(
                                 fontSize: 13,
                                 color: Color(0xFF94A3B8),
@@ -881,25 +878,40 @@ class _HistoryTripDetailsScreenState extends ConsumerState<HistoryTripDetailsScr
                         width: double.infinity,
                         height: 52,
                         child: OutlinedButton.icon(
-                          onPressed: () {
-                            Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (context) => HistoryTripReportScreen(trip: trip),
-                              ),
-                            );
+                          onPressed: () async {
+                            if (_hasReported && _existingReport != null) {
+                              await Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (context) => HistoryReportDetailsScreen(report: _existingReport!),
+                                ),
+                              );
+                            } else {
+                              await Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (context) => HistoryTripReportScreen(trip: trip),
+                                ),
+                              );
+                            }
+                            _checkReportStatus();
                           },
-                          icon: const Icon(Icons.error_outline_rounded, color: Color(0xFF64748B)),
-                          label: const Text(
-                            'รายงานคนขับ',
+                          icon: Icon(
+                            _hasReported ? Icons.assignment_turned_in_rounded : Icons.error_outline_rounded,
+                            color: _hasReported ? const Color(0xFF0D47A1) : const Color(0xFF64748B),
+                          ),
+                          label: Text(
+                            _hasReported ? 'ดูรายงานที่คุณแจ้งไว้' : 'รายงานคนขับ',
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
-                              color: Color(0xFF64748B),
+                              color: _hasReported ? const Color(0xFF0D47A1) : const Color(0xFF64748B),
                             ),
                           ),
                           style: OutlinedButton.styleFrom(
-                            backgroundColor: const Color(0xFFF8FAFC),
-                            side: const BorderSide(color: Color(0xFFE2E8F0)),
+                            backgroundColor: _hasReported ? const Color(0xFFEFF6FF) : const Color(0xFFF8FAFC),
+                            side: BorderSide(
+                              color: _hasReported ? const Color(0xFF93C5FD) : const Color(0xFFE2E8F0),
+                              width: _hasReported ? 1.5 : 1.0,
+                            ),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(16),
                             ),

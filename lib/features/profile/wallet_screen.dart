@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:safeseat_mini/core/theme/app_theme.dart';
 import 'package:safeseat_mini/core/controllers/user_controller.dart';
+import 'package:safeseat_mini/core/utils/app_feedback.dart';
+import 'package:safeseat_mini/core/utils/validators.dart';
 import 'package:safeseat_mini/features/profile/controllers/profile_controller.dart';
 
 class WalletScreen extends ConsumerStatefulWidget {
@@ -15,6 +17,7 @@ class WalletScreen extends ConsumerStatefulWidget {
 }
 
 class _WalletScreenState extends ConsumerState<WalletScreen> {
+  final _formKey = GlobalKey<FormState>();
   final TextEditingController _customAmountController = TextEditingController();
   final FocusNode _customAmountFocusNode = FocusNode();
 
@@ -47,6 +50,7 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
       _customAmountController.text = amount.toString();
       _customAmountFocusNode.unfocus();
     });
+    _formKey.currentState?.validate();
   }
 
   double _getFinalAmount() {
@@ -57,14 +61,14 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
   }
 
   void _handleConfirmPayment(BuildContext context, double currentBalance) {
+    if (!_formKey.currentState!.validate()) {
+      AppSnackBar.showWarning(context, 'กรุณากรอกจำนวนเงินให้ถูกต้อง');
+      return;
+    }
+
     final amount = _getFinalAmount();
     if (amount <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('กรุณาระบุจำนวนเงินที่ต้องการเติม'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      AppSnackBar.showWarning(context, 'กรุณาระบุจำนวนเงินที่ต้องการเติม');
       return;
     }
 
@@ -280,113 +284,41 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
     final user = ref.read(userProvider);
     if (user == null) return;
 
-    // Show a loading indicator dialog
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => const Center(
-        child: CircularProgressIndicator(),
-      ),
-    );
-
-    final newBalance = currentBalance + amount;
-    final updatedUser = user.copyWith(walletBalance: newBalance);
+    // Show standardized loading dialog
+    AppDialog.showLoading(context, message: 'กำลังดำเนินการเติมเงิน...');
 
     try {
       final success = await ref
           .read(profileControllerProvider.notifier)
-          .editProfile(updatedUser);
+          .topUpWallet(user.phoneNo, amount);
 
       if (!context.mounted) return;
-      Navigator.of(context).pop(); // Dismiss loading dialog
+      AppDialog.hideLoading(context);
 
       if (success) {
-        // Show Success Dialog
-        showDialog(
+        // Show Standard Success Dialog
+        AppDialog.showSuccess(
           context: context,
-          builder: (BuildContext dialogContext) {
-            return AlertDialog(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const SizedBox(height: 16),
-                  const Icon(
-                    Icons.check_circle,
-                    color: Colors.green,
-                    size: 64,
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'เติมเงินสำเร็จ',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF1E293B),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'เติมเงินจำนวน ฿${amount.toStringAsFixed(2)} เรียบร้อยแล้ว',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 15,
-                      color: Colors.grey[600],
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 48,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.primaryColor,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      onPressed: () {
-                        Navigator.of(dialogContext).pop();
-                        // Reset inputs
-                        setState(() {
-                          _customAmountController.text = '200';
-                        });
-                      },
-                      child: const Text(
-                        'ตกลง',
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            );
+          title: 'เติมเงินสำเร็จ',
+          message: 'เติมเงินจำนวน ฿${amount.toStringAsFixed(2)} เข้ากระเป๋า SafeSeat Wallet เรียบร้อยแล้ว',
+          buttonText: 'ตกลง',
+          onDismiss: () {
+            if (mounted) {
+              setState(() {
+                _customAmountController.text = '200';
+              });
+            }
           },
         );
       } else {
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('เกิดข้อผิดพลาดในการบันทึกยอดเงินลงเซิร์ฟเวอร์'),
-              backgroundColor: Colors.red,
-            ),
-          );
+          AppSnackBar.showError(context, 'เกิดข้อผิดพลาดในการบันทึกยอดเงินลงเซิร์ฟเวอร์');
         }
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('เกิดข้อผิดพลาด: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        AppDialog.hideLoading(context);
+        AppSnackBar.showError(context, 'เกิดข้อผิดพลาด: $e');
       }
     }
   }
@@ -542,54 +474,66 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
                     const SizedBox(height: 12),
 
                     // Custom Amount TextField
-                    Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: _customAmountFocusNode.hasFocus
-                              ? AppTheme.primaryColor
-                              : const Color(0xFFE2E8F0),
-                          width: _customAmountFocusNode.hasFocus ? 1.5 : 1,
-                        ),
-                      ),
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              controller: _customAmountController,
-                              focusNode: _customAmountFocusNode,
-                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                              inputFormatters: [
-                                FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d{0,2}')),
-                              ],
-                              decoration: const InputDecoration(
-                                hintText: 'ระบุจำนวนเงินเอง',
-                                hintStyle: TextStyle(
-                                  color: Color(0xFF94A3B8),
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.normal,
-                                ),
-                                border: InputBorder.none,
-                                contentPadding: EdgeInsets.symmetric(vertical: 16),
-                              ),
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w500,
-                                color: Color(0xFF0F172A),
-                              ),
-                            ),
-                          ),
-                          const Text(
-                            '฿',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF475569),
-                            ),
-                          ),
+                    Form(
+                      key: _formKey,
+                      child: TextFormField(
+                        controller: _customAmountController,
+                        focusNode: _customAmountFocusNode,
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                          LengthLimitingTextInputFormatter(5),
                         ],
+                        validator: AppValidators.validateAmount,
+                        onChanged: (val) {
+                          setState(() {});
+                        },
+                        decoration: InputDecoration(
+                          hintText: 'ระบุจำนวนเงินเอง',
+                          hintStyle: const TextStyle(
+                            color: Color(0xFF94A3B8),
+                            fontSize: 16,
+                            fontWeight: FontWeight.normal,
+                          ),
+                          fillColor: Colors.white,
+                          filled: true,
+                          suffixText: '฿',
+                          suffixStyle: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF475569),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 16,
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide:
+                                const BorderSide(color: Color(0xFFE2E8F0)),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(
+                              color: AppTheme.primaryColor,
+                              width: 1.5,
+                            ),
+                          ),
+                          errorBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: Colors.red),
+                          ),
+                          focusedErrorBorder: const OutlineInputBorder(
+                            borderRadius: BorderRadius.all(Radius.circular(12)),
+                            borderSide:
+                                BorderSide(color: Colors.red, width: 1.5),
+                          ),
+                        ),
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                          color: Color(0xFF0F172A),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 24),

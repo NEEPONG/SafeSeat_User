@@ -1,10 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:safeseat_mini/core/controllers/user_controller.dart';
+import 'package:safeseat_mini/core/utils/app_feedback.dart';
+import 'package:safeseat_mini/core/utils/validators.dart';
 import 'package:safeseat_mini/features/profile/controllers/profile_controller.dart';
 import 'package:safeseat_mini/data/models/car_model.dart';
+import 'package:safeseat_mini/features/request_driver/select_location_screen.dart';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
+
+import 'dart:convert';
+import 'package:latlong2/latlong.dart';
 
 class EditProfileScreen extends ConsumerStatefulWidget {
   const EditProfileScreen({super.key});
@@ -24,6 +30,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   int? _selectedGender;
   String? _profileImagePath;
   File? _selectedImage;
+  LatLng? _homeLatLng;
 
   Future<void> _pickImage() async {
     final picker = ImagePicker();
@@ -45,8 +52,9 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     _nameController = TextEditingController(text: user?.name ?? '');
     _phoneController = TextEditingController(text: user?.phoneNo ?? '');
     _emailController = TextEditingController(text: user?.email ?? '');
-    _addressController = TextEditingController(text: user?.mainAddress ?? '');
+    _addressController = TextEditingController(text: user?.homeDisplayName ?? user?.mainAddress ?? '');
     _selectedGender = user?.gender;
+    _homeLatLng = user?.homeLatLng;
   }
 
   @override
@@ -59,32 +67,39 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   }
 
   void _saveProfile() async {
-    if (_formKey.currentState!.validate()) {
-      final currentUser = ref.read(userProvider);
-      if (currentUser == null) return;
-      
-      final scaffoldMessenger = ScaffoldMessenger.of(context);
-      final navigator = Navigator.of(context);
+    if (!_formKey.currentState!.validate()) {
+      AppSnackBar.showWarning(context, 'กรุณากรอกข้อมูลให้ถูกต้องครบถ้วน');
+      return;
+    }
 
-      final success = await ref.read(profileControllerProvider.notifier).editProfileWithImage(
-        currentUser: currentUser,
-        name: _nameController.text,
-        email: _emailController.text,
-        gender: _selectedGender,
-        address: _addressController.text,
-        selectedImage: _selectedImage,
-      );
+    final currentUser = ref.read(userProvider);
+    if (currentUser == null) return;
+    
+    final navigator = Navigator.of(context);
 
-      if (success && mounted) {
-        scaffoldMessenger.showSnackBar(
-          const SnackBar(content: Text('บันทึกข้อมูลเรียบร้อยแล้ว')),
-        );
-        navigator.pop();
-      } else if (mounted) {
-        scaffoldMessenger.showSnackBar(
-          const SnackBar(content: Text('บันทึกข้อมูลไม่สำเร็จ กรุณาลองใหม่')),
-        );
-      }
+    String addressToSave = _addressController.text.trim();
+    if (addressToSave.isNotEmpty && _homeLatLng != null) {
+      addressToSave = jsonEncode({
+        'name': addressToSave,
+        'lat': _homeLatLng!.latitude,
+        'lng': _homeLatLng!.longitude,
+      });
+    }
+
+    final success = await ref.read(profileControllerProvider.notifier).editProfileWithImage(
+      currentUser: currentUser,
+      name: _nameController.text,
+      email: _emailController.text,
+      gender: _selectedGender,
+      address: addressToSave,
+      selectedImage: _selectedImage,
+    );
+
+    if (success && mounted) {
+      AppSnackBar.showSuccess(context, 'บันทึกข้อมูลโปรไฟล์เรียบร้อยแล้ว');
+      navigator.pop();
+    } else if (mounted) {
+      AppSnackBar.showError(context, 'บันทึกข้อมูลไม่สำเร็จ กรุณาลองใหม่อีกครั้ง');
     }
   }
 
@@ -96,6 +111,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     final modelCtrl = TextEditingController();
     final colorCtrl = TextEditingController();
     final plateCtrl = TextEditingController();
+    final carFormKey = GlobalKey<FormState>();
     int? selectedCarType;
 
     showModalBottomSheet(
@@ -115,93 +131,143 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
           child: Consumer(
             builder: (context, ref, child) {
               final carTypesAsync = ref.watch(carTypeProvider);
-              return Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'เพิ่มยานพาหนะใหม่',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF0044C9)),
-                  ),
-                  const SizedBox(height: 16),
-                  _buildTextField(controller: brandCtrl, icon: Icons.branding_watermark, hintText: 'ยี่ห้อ (เช่น Toyota)'),
-                  _buildTextField(controller: modelCtrl, icon: Icons.car_repair, hintText: 'รุ่น (เช่น Camry)'),
-                  _buildTextField(controller: colorCtrl, icon: Icons.color_lens, hintText: 'สีรถ (เช่น ดำ)'),
-                  _buildTextField(controller: plateCtrl, icon: Icons.pin, hintText: 'ทะเบียนรถ (เช่น กค 1234)'),
-                  
-                  carTypesAsync.when(
-                    data: (carTypes) {
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 16),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.grey.withValues(alpha: 0.3)),
-                        ),
-                        child: DropdownButtonFormField<int>(
-                          decoration: const InputDecoration(
-                            prefixIcon: Icon(Icons.category, color: Colors.grey),
-                            border: InputBorder.none,
-                            contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                          ),
-                          hint: const Text('ประเภทรถ'),
-                          initialValue: selectedCarType,
-                          items: carTypes.map((type) {
-                            return DropdownMenuItem(
-                              value: type.carTypeId,
-                              child: Text(type.carTypeName),
-                            );
-                          }).toList(),
-                          onChanged: (val) {
-                            selectedCarType = val;
-                          },
-                        ),
-                      );
-                    },
-                    loading: () => const Center(child: CircularProgressIndicator()),
-                    error: (err, stack) => const Text('Failed to load car types'),
-                  ),
-                  
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 50,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF1E293B),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              return Form(
+                key: carFormKey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'เพิ่มยานพาหนะใหม่',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF0044C9),
                       ),
-                      onPressed: () async {
-                        if (brandCtrl.text.isEmpty || modelCtrl.text.isEmpty || colorCtrl.text.isEmpty || plateCtrl.text.isEmpty || selectedCarType == null) {
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('กรุณากรอกข้อมูลให้ครบถ้วน')));
-                          return;
-                        }
-
-                        final newCar = CarModel(
-                          userCarId: 0,
-                          carBrand: brandCtrl.text,
-                          carColor: colorCtrl.text,
-                          carModel: modelCtrl.text,
-                          carPlate: plateCtrl.text,
-                          carType: selectedCarType!,
-                          userId: currentUser.phoneNo,
-                        );
-
-                        final scaffoldMessenger = ScaffoldMessenger.of(context);
-                        final navigator = Navigator.of(context);
-                        final success = await ref.read(profileControllerProvider.notifier).addUserCar(newCar);
-                        if (success && mounted) {
-                          navigator.pop();
-                          scaffoldMessenger.showSnackBar(const SnackBar(content: Text('เพิ่มรถสำเร็จ')));
-                        } else if (mounted) {
-                          scaffoldMessenger.showSnackBar(const SnackBar(content: Text('เกิดข้อผิดพลาดในการเพิ่มรถ')));
-                        }
-                      },
-                      child: const Text('บันทึกยานพาหนะ', style: TextStyle(color: Colors.white, fontSize: 16)),
                     ),
-                  ),
-                  const SizedBox(height: 20),
-                ],
+                    const SizedBox(height: 16),
+                    _buildTextField(
+                      controller: brandCtrl,
+                      icon: Icons.branding_watermark,
+                      hintText: 'ยี่ห้อ (เช่น Toyota)',
+                      validator: AppValidators.validateCarBrand,
+                    ),
+                    _buildTextField(
+                      controller: modelCtrl,
+                      icon: Icons.car_repair,
+                      hintText: 'รุ่น (เช่น Camry)',
+                      validator: AppValidators.validateCarModel,
+                    ),
+                    _buildTextField(
+                      controller: colorCtrl,
+                      icon: Icons.color_lens,
+                      hintText: 'สีรถ (เช่น ดำ)',
+                      validator: AppValidators.validateCarColor,
+                    ),
+                    _buildTextField(
+                      controller: plateCtrl,
+                      icon: Icons.pin,
+                      hintText: 'ทะเบียนรถ (เช่น กค-1234)',
+                      validator: AppValidators.validateCarPlate,
+                    ),
+                    
+                    carTypesAsync.when(
+                      data: (carTypes) {
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 16),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: Colors.grey.withValues(alpha: 0.3),
+                            ),
+                          ),
+                          child: DropdownButtonFormField<int>(
+                            decoration: const InputDecoration(
+                              prefixIcon:
+                                  Icon(Icons.category, color: Colors.grey),
+                              border: InputBorder.none,
+                              contentPadding: EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 14,
+                              ),
+                            ),
+                            hint: const Text('ชนิดเกียร์ / ระบบส่งกำลัง (Auto, Manual, EV)'),
+                            initialValue: selectedCarType,
+                            items: carTypes.map((type) {
+                              return DropdownMenuItem(
+                                value: type.carTypeId,
+                                child: Text(type.carTypeName),
+                              );
+                            }).toList(),
+                            onChanged: (val) {
+                              selectedCarType = val;
+                            },
+                          ),
+                        );
+                      },
+                      loading: () =>
+                          const Center(child: CircularProgressIndicator()),
+                      error: (err, stack) =>
+                          const Text('Failed to load car types'),
+                    ),
+                    
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 50,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF1E293B),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        onPressed: () async {
+                          if (!carFormKey.currentState!.validate() ||
+                              selectedCarType == null) {
+                            AppSnackBar.showWarning(
+                              context,
+                              'กรุณากรอกข้อมูลยานพาหนะและเลือกประเภทรถให้ครบถ้วน',
+                            );
+                            return;
+                          }
+
+                          final newCar = CarModel(
+                            userCarId: 0,
+                            carBrand: brandCtrl.text.trim(),
+                            carColor: colorCtrl.text.trim(),
+                            carModel: modelCtrl.text.trim(),
+                            carPlate: plateCtrl.text.trim(),
+                            carType: selectedCarType!,
+                            userId: currentUser.phoneNo,
+                          );
+
+                          final navigator = Navigator.of(context);
+                          final success = await ref
+                              .read(profileControllerProvider.notifier)
+                              .addUserCar(newCar);
+                          if (!context.mounted) return;
+
+                          if (success) {
+                            navigator.pop();
+                            AppSnackBar.showSuccess(context, 'เพิ่มยานพาหนะสำเร็จ');
+                          } else {
+                            AppSnackBar.showError(
+                              context,
+                              'เกิดข้อผิดพลาดในการเพิ่มยานพาหนะ กรุณาลองใหม่',
+                            );
+                          }
+                        },
+                        child: const Text(
+                          'บันทึกยานพาหนะ',
+                          style: TextStyle(color: Colors.white, fontSize: 16),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                  ],
+                ),
               );
             },
           ),
@@ -309,8 +375,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                 controller: _nameController,
                 icon: Icons.person_outline,
                 hintText: 'ชื่อ-นามสกุล',
-                validator: (value) =>
-                    value == null || value.isEmpty ? 'กรุณากรอกชื่อ' : null,
+                validator: AppValidators.validateName,
               ),
 
               _buildLabel('เบอร์มือถือ'),
@@ -319,6 +384,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                 icon: Icons.phone_outlined,
                 hintText: 'เบอร์มือถือ',
                 readOnly: true,
+                validator: AppValidators.validatePhone,
               ),
 
               _buildLabel('อีเมล'),
@@ -327,6 +393,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                 icon: Icons.email_outlined,
                 hintText: 'อีเมล',
                 keyboardType: TextInputType.emailAddress,
+                validator: AppValidators.validateEmail,
               ),
 
               _buildLabel('เพศ'),
@@ -364,13 +431,82 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                 ),
               ),
 
-              _buildLabel('ที่อยู่ตั้งต้น'),
-              _buildTextField(
-                controller: _addressController,
-                icon: Icons.location_on_outlined,
-                hintText: 'โปรดระบุที่อยู่หลักของคุณ',
-                maxLines: 3,
+              _buildLabel('ที่อยู่ตั้งต้น / ตำแหน่งบ้าน'),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: _buildTextField(
+                      controller: _addressController,
+                      icon: Icons.home_outlined,
+                      hintText: 'ระบุที่อยู่บ้าน หรือกดปุ่มปักหมุด',
+                      maxLines: 2,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  InkWell(
+                    onTap: () async {
+                      final result = await Navigator.push<Map<String, dynamic>>(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const SelectLocationScreen(
+                            isPickup: false,
+                            isPickingForProfile: true,
+                          ),
+                        ),
+                      );
+                      if (result != null && result['address'] != null) {
+                        setState(() {
+                          _addressController.text = result['address'] as String;
+                          if (result['latLng'] != null) {
+                            _homeLatLng = result['latLng'] as LatLng;
+                          }
+                        });
+                        if (!context.mounted) return;
+                        AppSnackBar.showSuccess(context, 'บันทึกพิกัดตำแหน่งบ้านจากแผนที่เรียบร้อย');
+                      }
+                    },
+                    borderRadius: BorderRadius.circular(12),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF0044C9),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.map_outlined, color: Colors.white, size: 22),
+                          SizedBox(height: 4),
+                          Text(
+                            'ปักหมุด',
+                            style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               ),
+
+              if (_homeLatLng != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6.0, bottom: 4.0),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.check_circle, color: Color(0xFF10B981), size: 14),
+                      const SizedBox(width: 6),
+                      Text(
+                        'พิกัดที่ปักหมุด: ${_homeLatLng!.latitude.toStringAsFixed(5)}, ${_homeLatLng!.longitude.toStringAsFixed(5)}',
+                        style: const TextStyle(
+                          color: Color(0xFF0F766E),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
 
               const SizedBox(height: 8),
 
@@ -430,7 +566,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
                         itemCount: cars.length,
-                        itemBuilder: (context, index) {
+                        itemBuilder: (itemContext, index) {
                           final car = cars[index];
                           return Container(
                             margin: const EdgeInsets.only(bottom: 12),
@@ -483,34 +619,29 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                                 ),
                                 IconButton(
                                   icon: const Icon(Icons.delete_outline, color: Colors.red),
-                                  onPressed: () {
-                                    showDialog(
+                                  onPressed: () async {
+                                    final confirmed = await AppDialog.showConfirm(
                                       context: context,
-                                      builder: (context) => AlertDialog(
-                                        title: const Text('ยืนยันการลบ'),
-                                        content: const Text('คุณแน่ใจหรือไม่ว่าต้องการลบยานพาหนะคันนี้?'),
-                                        actions: [
-                                          TextButton(
-                                            onPressed: () => Navigator.pop(context),
-                                            child: const Text('ยกเลิก', style: TextStyle(color: Colors.grey)),
-                                          ),
-                                          TextButton(
-                                            onPressed: () async {
-                                              final scaffoldMessenger = ScaffoldMessenger.of(context);
-                                              final navigator = Navigator.of(context);
-                                              navigator.pop();
-                                              final success = await ref.read(profileControllerProvider.notifier).deleteUserCar(car.userCarId, currentUser.phoneNo);
-                                              if (success && mounted) {
-                                                scaffoldMessenger.showSnackBar(const SnackBar(content: Text('ลบยานพาหนะสำเร็จ')));
-                                              } else if (mounted) {
-                                                scaffoldMessenger.showSnackBar(const SnackBar(content: Text('ลบยานพาหนะไม่สำเร็จ')));
-                                              }
-                                            },
-                                            child: const Text('ลบ', style: TextStyle(color: Colors.red)),
-                                          ),
-                                        ],
-                                      ),
+                                      title: 'ยืนยันการลบยานพาหนะ',
+                                      message: 'คุณแน่ใจหรือไม่ว่าต้องการลบ ${car.carBrand} ${car.carModel} (${car.carPlate}) ออกจากรายการ?',
+                                      confirmText: 'ลบยานพาหนะ',
+                                      cancelText: 'ยกเลิก',
+                                      isDestructive: true,
+                                      icon: Icons.directions_car_outlined,
+                                      iconColor: const Color(0xFFEF4444),
                                     );
+
+                                     if (confirmed == true) {
+                                      final success = await ref
+                                          .read(profileControllerProvider.notifier)
+                                          .deleteUserCar(car.userCarId, currentUser.phoneNo);
+                                      if (!context.mounted) return;
+                                       if (success) {
+                                        AppSnackBar.showSuccess(context, 'ลบยานพาหนะสำเร็จ');
+                                       } else {
+                                        AppSnackBar.showError(context, 'ลบยานพาหนะไม่สำเร็จ กรุณาลองใหม่อีกครั้ง');
+                                      }
+                                    }
                                   },
                                 ),
                               ],

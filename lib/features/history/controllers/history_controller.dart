@@ -37,6 +37,12 @@ class HistoryReportController extends Notifier<bool> {
     return false; // represents isLoading state
   }
 
+  /// Checks if a report has already been submitted for the trip.
+  Future<Map<String, dynamic>> checkReportStatus(int requestId) async {
+    final repo = ref.read(requestDriverRepositoryProvider);
+    return repo.checkDriverReport(requestId);
+  }
+
   /// Uploads report images and saves the driver report via repository.
   Future<bool> submitDriverReport({
     required int requestId,

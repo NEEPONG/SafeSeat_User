@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:safeseat_mini/core/theme/app_theme.dart';
+import 'package:safeseat_mini/core/utils/app_feedback.dart';
 import 'package:safeseat_mini/features/profile/edit_profile_screen.dart';
 import 'package:safeseat_mini/core/controllers/user_controller.dart';
 import 'package:safeseat_mini/features/profile/wallet_screen.dart';
+import 'package:safeseat_mini/features/auth/login_screen.dart';
 
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
@@ -252,7 +254,96 @@ class ProfileScreen extends ConsumerWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 32),
+            const SizedBox(height: 24),
+
+            // Saved Home Address Card
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.grey.withValues(alpha: 0.2)),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primaryColor.withValues(alpha: 0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.home_outlined,
+                      color: AppTheme.primaryColor,
+                      size: 24,
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'ที่อยู่ตั้งต้น / บ้าน',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Color(0xFF64748B),
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          user.homeDisplayName != null && user.homeDisplayName!.trim().isNotEmpty
+                              ? user.homeDisplayName!
+                              : 'ยังไม่ได้ระบุที่อยู่บ้าน',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: user.homeDisplayName != null && user.homeDisplayName!.trim().isNotEmpty
+                                ? const Color(0xFF1E293B)
+                                : const Color(0xFF94A3B8),
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        if (user.homeLatLng != null)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 2.0),
+                            child: Text(
+                              '📍 พิกัดแม่นยำ: ${user.homeLatitude!.toStringAsFixed(4)}, ${user.homeLongitude!.toStringAsFixed(4)}',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: Color(0xFF0F766E),
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const EditProfileScreen(),
+                        ),
+                      );
+                    },
+                    child: Text(
+                      user.homeDisplayName != null && user.homeDisplayName!.trim().isNotEmpty ? 'แก้ไข' : 'ตั้งค่า',
+                      style: const TextStyle(
+                        color: AppTheme.primaryColor,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 28),
 
             // General Menu
             const Text(
@@ -314,11 +405,60 @@ class ProfileScreen extends ConsumerWidget {
                 ],
               ),
             ),
+            const SizedBox(height: 12),
+
+            // Logout Button
+            SizedBox(
+              width: double.infinity,
+              height: 52,
+              child: OutlinedButton.icon(
+                onPressed: () => _showLogoutDialog(context, ref),
+                icon: const Icon(Icons.logout, color: Colors.red, size: 20),
+                label: const Text(
+                  'ออกจากระบบ',
+                  style: TextStyle(
+                    color: Colors.red,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: Color(0xFFFCA5A5)),
+                  backgroundColor: const Color(0xFFFEF2F2),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+              ),
+            ),
+
             const SizedBox(height: 32),
           ],
         ),
       ),
     );
+  }
+
+  void _showLogoutDialog(BuildContext context, WidgetRef ref) async {
+    final confirmed = await AppDialog.showConfirm(
+      context: context,
+      title: 'ออกจากระบบ',
+      message: 'คุณแน่ใจหรือไม่ว่าต้องการออกจากระบบบัญชีของคุณ?',
+      confirmText: 'ออกจากระบบ',
+      cancelText: 'ยกเลิก',
+      isDestructive: true,
+      icon: Icons.logout_rounded,
+      iconColor: const Color(0xFFEF4444),
+    );
+
+    if (confirmed == true && context.mounted) {
+      ref.read(userProvider.notifier).clearUser();
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (context) => const LoginScreen()),
+        (route) => false,
+      );
+      AppSnackBar.showInfo(context, 'ออกจากระบบเรียบร้อยแล้ว');
+    }
   }
 
   Widget _buildMenuItem(IconData icon, String title) {
