@@ -11,11 +11,15 @@ import 'package:safeseat_mini/features/history/controllers/history_controller.da
 class HistoryTripReviewScreen extends ConsumerStatefulWidget {
   final RequestDriverModel trip;
   final List<ReviewModel>? existingReviews;
+  final String? pickupAddress;
+  final String? dropoffAddress;
 
   const HistoryTripReviewScreen({
     super.key,
     required this.trip,
     this.existingReviews,
+    this.pickupAddress,
+    this.dropoffAddress,
   });
 
   @override
@@ -249,10 +253,12 @@ class _HistoryTripReviewScreenState extends ConsumerState<HistoryTripReviewScree
         ? '${widget.trip.follower!.firstname} ${widget.trip.follower!.lastname}'
         : 'คุณหญิงนิ่ม สุดสวยเท่';
 
-    final pickupPoint = widget.trip.note != null && widget.trip.note!.isNotEmpty
-        ? widget.trip.note!
-        : 'ผับคุณหนูนิ่มประจำเชียงใหม่';
-    const dropoffPoint = 'บ้านนิ่มเชียงใหม่แสนไกล';
+    final pickupPoint = widget.pickupAddress ??
+        (widget.trip.note != null && widget.trip.note!.isNotEmpty
+            ? widget.trip.note!
+            : 'จุดรับ (${widget.trip.pickupLatitude.toStringAsFixed(4)}, ${widget.trip.pickupLongitude.toStringAsFixed(4)})');
+    final dropoffPoint = widget.dropoffAddress ??
+        'จุดส่ง (${widget.trip.dropoffLatitude.toStringAsFixed(4)}, ${widget.trip.dropoffLongitude.toStringAsFixed(4)})';
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
@@ -337,7 +343,7 @@ class _HistoryTripReviewScreenState extends ConsumerState<HistoryTripReviewScree
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 const Text(
-                                  'PICKUP POINT',
+                                  'จุดรับ',
                                   style: TextStyle(
                                     fontSize: 9,
                                     fontWeight: FontWeight.bold,
@@ -356,7 +362,7 @@ class _HistoryTripReviewScreenState extends ConsumerState<HistoryTripReviewScree
                                 ),
                                 const SizedBox(height: 8),
                                 const Text(
-                                  'DROP-OFF POINT',
+                                  'จุดส่ง',
                                   style: TextStyle(
                                     fontSize: 9,
                                     fontWeight: FontWeight.bold,

@@ -386,7 +386,7 @@ class _SelectLocationScreenState extends ConsumerState<SelectLocationScreen> {
     final user = ref.watch(userProvider);
     final titleText = widget.isPickingForProfile
         ? 'เลือกตำแหน่งที่อยู่บ้าน'
-        : (widget.isPickup ? 'จาก' : 'ไปที่');
+        : (widget.isPickup ? 'จุดรับ' : 'จุดส่ง');
     final themeColor = AppTheme.primaryColor;
 
     return Scaffold(
@@ -486,7 +486,7 @@ class _SelectLocationScreenState extends ConsumerState<SelectLocationScreen> {
                           child: Text(
                             widget.isPickingForProfile
                                 ? 'ที่อยู่บ้าน'
-                                : (widget.isPickup ? 'ต้นทาง' : 'ปลายทาง'),
+                                : (widget.isPickup ? 'จุดรับ' : 'จุดส่ง'),
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.bold,

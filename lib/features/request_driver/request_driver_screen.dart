@@ -223,7 +223,7 @@ class _RequestDriverScreenState extends ConsumerState<RequestDriverScreen> {
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: const Text(
-                  'รับที่นี่',
+                  'จุดรับ',
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 11,
@@ -259,7 +259,7 @@ class _RequestDriverScreenState extends ConsumerState<RequestDriverScreen> {
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: const Text(
-                  'ส่งที่นี่',
+                  'จุดส่ง',
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 11,
@@ -376,7 +376,7 @@ class _RequestDriverScreenState extends ConsumerState<RequestDriverScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 const Text(
-                                  'เดินทางจาก',
+                                  'จุดรับ',
                                   style: TextStyle(
                                     fontSize: 12,
                                     color: Color(0xFF94A3B8),
@@ -404,7 +404,7 @@ class _RequestDriverScreenState extends ConsumerState<RequestDriverScreen> {
                               borderRadius: BorderRadius.circular(20),
                             ),
                             child: const Text(
-                              'เดินทางจาก',
+                              'จุดรับ',
                               style: TextStyle(
                                 fontSize: 12,
                                 color: Color(0xFF64748B),
@@ -448,7 +448,7 @@ class _RequestDriverScreenState extends ConsumerState<RequestDriverScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 const Text(
-                                  'ไปที่',
+                                  'จุดส่ง',
                                   style: TextStyle(
                                     fontSize: 12,
                                     color: Color(0xFF94A3B8),
@@ -457,7 +457,7 @@ class _RequestDriverScreenState extends ConsumerState<RequestDriverScreen> {
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
-                                  reqState.dropoffAddress ?? 'กรอกที่อยู่ปลายทางเพื่อค้นหา',
+                                  reqState.dropoffAddress ?? 'กรอกจุดส่งเพื่อค้นหา',
                                   style: TextStyle(
                                     fontSize: 16,
                                     color: reqState.dropoffAddress != null

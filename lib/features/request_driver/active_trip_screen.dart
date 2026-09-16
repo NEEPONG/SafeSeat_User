@@ -424,9 +424,9 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
     final String shareMessage =
         '🛡️ SafeSeat — แจ้งเตือนการเดินทาง (Live Tracking)\n\n'
         'ฉันกำลังเดินทางกลับอย่างปลอดภัยด้วยบริการคนขับแทน SafeSeat\n'
-        'คุณสามารถนำรหัสทริปไปตรวจสอบสถานะและพิกัดการเดินทางสดได้:\n\n'
+        'คุณสามารถนำรหัสทริปไปตรวจสอบสถานะบริการและพิกัดการเดินทางสดได้:\n\n'
         '🔖 รหัสทริป: #${widget.requestId}\n'
-        '🟢 สถานะปัจจุบัน: $_currentStatus\n'
+        '🟢 สถานะบริการ: $_currentStatus\n'
         '🚘 ยานพาหนะ: $carInfo\n'
         '👤 ทีมคนขับ: $leaderName\n\n'
         '-----------------------------------\n'
@@ -496,7 +496,7 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
       // Fallback
       return {
         'title': _currentStatus,
-        'desc': 'สถานะการเดินทางได้รับการอัปเดต',
+        'desc': 'สถานะบริการได้รับการอัปเดต',
         'color': AppTheme.primaryColor,
         'icon': Icons.map,
         'badgeColor': Colors.blueGrey[50],
@@ -510,58 +510,116 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
     final isTripCompleted = _currentStatus == 'เสร็จสิ้น';
 
     final List<Marker> markers = [
-      // Pickup Pin (ผับ / บาร์ / ร้านอาหาร) - Compact badge
+      // Pickup Pin
       Marker(
         point: _pickupLatLng,
-        width: 38,
-        height: 38,
-        child: Container(
-          decoration: BoxDecoration(
-            color: const Color(0xFFF97316), // ส้ม Amber/Orange สื่อถึง Nightlife/Pub & Restaurant
-            shape: BoxShape.circle,
-            border: Border.all(color: Colors.white, width: 2),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.25),
-                blurRadius: 6,
-                offset: const Offset(0, 3),
+        width: 90,
+        height: 65,
+        child: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: AppTheme.primaryColor,
+                borderRadius: BorderRadius.circular(8),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Colors.black26,
+                    blurRadius: 4,
+                    offset: Offset(0, 2),
+                  ),
+                ],
               ),
-            ],
-          ),
-          child: const Center(
-            child: Icon(
-              Icons.sports_bar_rounded, // หรือ Icons.nightlife_rounded / Icons.local_bar_rounded
-              color: Colors.white,
-              size: 20,
+              child: const Text(
+                'จุดรับ',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ),
-          ),
+            const SizedBox(height: 2),
+            Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                color: const Color(0xFFF97316),
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 2),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.25),
+                    blurRadius: 6,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+              ),
+              child: const Center(
+                child: Icon(
+                  Icons.sports_bar_rounded,
+                  color: Colors.white,
+                  size: 16,
+                ),
+              ),
+            ),
+          ],
         ),
       ),
-      // Dropoff Pin (บ้าน / ที่พัก) - Compact badge
+      // Dropoff Pin
       Marker(
         point: _dropoffLatLng,
-        width: 38,
-        height: 38,
-        child: Container(
-          decoration: BoxDecoration(
-            color: const Color(0xFF10B981), // สีเขียว Emerald สื่อถึงจุดหมายปลายทางที่ปลอดภัย
-            shape: BoxShape.circle,
-            border: Border.all(color: Colors.white, width: 2),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.25),
-                blurRadius: 6,
-                offset: const Offset(0, 3),
+        width: 90,
+        height: 65,
+        child: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: const Color(0xFF0F172A),
+                borderRadius: BorderRadius.circular(8),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Colors.black26,
+                    blurRadius: 4,
+                    offset: Offset(0, 2),
+                  ),
+                ],
               ),
-            ],
-          ),
-          child: const Center(
-            child: Icon(
-              Icons.home_rounded,
-              color: Colors.white,
-              size: 20,
+              child: const Text(
+                'จุดส่ง',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ),
-          ),
+            const SizedBox(height: 2),
+            Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                color: const Color(0xFF10B981),
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 2),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.25),
+                    blurRadius: 6,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+              ),
+              child: const Center(
+                child: Icon(
+                  Icons.home_rounded,
+                  color: Colors.white,
+                  size: 16,
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     ];
@@ -705,7 +763,7 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
                     ),
                     const SizedBox(width: 8),
                     const Text(
-                      'กำลังติดตามพิกัดสด',
+                      'กำลังติดตามตำแหน่งปัจจุบัน',
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.bold,
@@ -786,6 +844,40 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
+                                    Row(
+                                      children: [
+                                        const Text(
+                                          'สถานะบริการ',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w600,
+                                            color: Color(0xFF64748B),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                            vertical: 2,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: (statusUI['color'] as Color)
+                                                .withValues(alpha: 0.12),
+                                            borderRadius:
+                                                BorderRadius.circular(6),
+                                          ),
+                                          child: Text(
+                                            _currentStatus,
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.bold,
+                                              color: statusUI['color'] as Color,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 6),
                                     Text(
                                       statusUI['title'] as String,
                                       style: TextStyle(
@@ -806,6 +898,119 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
                                 ),
                               ),
                             ],
+                          ),
+                          
+                          const SizedBox(height: 16),
+
+                          // Route Summary Card (จุดรับ - จุดส่ง)
+                          Container(
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF8FAFC),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: const Color(0xFFE2E8F0),
+                              ),
+                            ),
+                            child: Column(
+                              children: [
+                                Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Container(
+                                      margin: const EdgeInsets.only(top: 4),
+                                      width: 10,
+                                      height: 10,
+                                      decoration: const BoxDecoration(
+                                        color: Colors.red,
+                                        shape: BoxShape.circle,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          const Text(
+                                            'จุดรับ',
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              color: Color(0xFF94A3B8),
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            widget.pickupAddress,
+                                            style: const TextStyle(
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w600,
+                                              color: Color(0xFF334155),
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const Padding(
+                                  padding: EdgeInsets.only(left: 4.0),
+                                  child: Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: SizedBox(
+                                      height: 12,
+                                      child: VerticalDivider(
+                                        thickness: 1.5,
+                                        color: Color(0xFFCBD5E1),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Container(
+                                      margin: const EdgeInsets.only(top: 4),
+                                      width: 10,
+                                      height: 10,
+                                      decoration: const BoxDecoration(
+                                        color: Color(0xFF10B981),
+                                        shape: BoxShape.circle,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          const Text(
+                                            'จุดส่ง',
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              color: Color(0xFF94A3B8),
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            widget.dropoffAddress,
+                                            style: const TextStyle(
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w600,
+                                              color: Color(0xFF334155),
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
                           ),
                           
                           const Divider(height: 32),

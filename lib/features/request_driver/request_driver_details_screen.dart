@@ -332,7 +332,7 @@ class _RequestDriverDetailsScreenState
                                 ],
                               ),
                               child: const Text(
-                                'รับที่นี่',
+                                'จุดรับ',
                                 style: TextStyle(
                                   color: Colors.white,
                                   fontSize: 11,
@@ -372,7 +372,7 @@ class _RequestDriverDetailsScreenState
                                 ],
                               ),
                               child: const Text(
-                                'ส่งที่นี่',
+                                'จุดส่ง',
                                 style: TextStyle(
                                   color: Colors.white,
                                   fontSize: 11,
@@ -544,8 +544,10 @@ class _RequestDriverDetailsScreenState
                             child: Column(
                               children: [
                                 Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Container(
+                                      margin: const EdgeInsets.only(top: 4),
                                       width: 10,
                                       height: 10,
                                       decoration: const BoxDecoration(
@@ -555,16 +557,30 @@ class _RequestDriverDetailsScreenState
                                     ),
                                     const SizedBox(width: 12),
                                     Expanded(
-                                      child: Text(
-                                        reqState.pickupAddress ??
-                                            'จุดรับผู้โดยสาร',
-                                        style: const TextStyle(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w600,
-                                          color: Color(0xFF334155),
-                                        ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          const Text(
+                                            'จุดรับ',
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              color: Color(0xFF94A3B8),
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            reqState.pickupAddress ??
+                                                'จุดรับ',
+                                            style: const TextStyle(
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w600,
+                                              color: Color(0xFF334155),
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ],
                                       ),
                                     ),
                                     if (_distanceInKm > 0)
@@ -604,8 +620,10 @@ class _RequestDriverDetailsScreenState
                                   ),
                                 ),
                                 Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Container(
+                                      margin: const EdgeInsets.only(top: 4),
                                       width: 10,
                                       height: 10,
                                       decoration: const BoxDecoration(
@@ -615,16 +633,30 @@ class _RequestDriverDetailsScreenState
                                     ),
                                     const SizedBox(width: 12),
                                     Expanded(
-                                      child: Text(
-                                        reqState.dropoffAddress ??
-                                            'จุดส่งปลายทาง',
-                                        style: const TextStyle(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w600,
-                                          color: Color(0xFF334155),
-                                        ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          const Text(
+                                            'จุดส่ง',
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              color: Color(0xFF94A3B8),
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            reqState.dropoffAddress ??
+                                                'จุดส่ง',
+                                            style: const TextStyle(
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w600,
+                                              color: Color(0xFF334155),
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ],
                                       ),
                                     ),
                                   ],

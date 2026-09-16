@@ -10,8 +10,15 @@ import 'package:safeseat_mini/features/history/controllers/history_controller.da
 
 class HistoryTripReportScreen extends ConsumerStatefulWidget {
   final RequestDriverModel trip;
+  final String? pickupAddress;
+  final String? dropoffAddress;
 
-  const HistoryTripReportScreen({super.key, required this.trip});
+  const HistoryTripReportScreen({
+    super.key,
+    required this.trip,
+    this.pickupAddress,
+    this.dropoffAddress,
+  });
 
   @override
   ConsumerState<HistoryTripReportScreen> createState() => _HistoryTripReportScreenState();
@@ -206,10 +213,12 @@ class _HistoryTripReportScreenState extends ConsumerState<HistoryTripReportScree
     final trip = widget.trip;
     final orderCode = '#ORD${trip.requestId.toString().padLeft(4, '0')}';
     
-    final pickupPoint = trip.note != null && trip.note!.isNotEmpty
-        ? trip.note!
-        : 'ผับคุณหนูนิ่มประจำเชียงใหม่';
-    const dropoffPoint = 'บ้านนิ่มในเชียงใหม่แสนไกล';
+    final pickupPoint = widget.pickupAddress ??
+        (trip.note != null && trip.note!.isNotEmpty
+            ? trip.note!
+            : 'จุดรับ (${trip.pickupLatitude.toStringAsFixed(4)}, ${trip.pickupLongitude.toStringAsFixed(4)})');
+    final dropoffPoint = widget.dropoffAddress ??
+        'จุดส่ง (${trip.dropoffLatitude.toStringAsFixed(4)}, ${trip.dropoffLongitude.toStringAsFixed(4)})';
 
     // Build the driver targets list based on available drivers
     final List<DropdownMenuItem<String>> targetItems = [];
@@ -314,7 +323,7 @@ class _HistoryTripReportScreenState extends ConsumerState<HistoryTripReportScree
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             const Text(
-                              'PICKUP POINT',
+                              'จุดรับ',
                               style: TextStyle(
                                 fontSize: 10,
                                 fontWeight: FontWeight.bold,
@@ -333,18 +342,18 @@ class _HistoryTripReportScreenState extends ConsumerState<HistoryTripReportScree
                             ),
                             const SizedBox(height: 18),
                             const Text(
-                              'DROP-OFF POINT',
+                              'จุดส่ง',
                               style: TextStyle(
                                 fontSize: 10,
                                 fontWeight: FontWeight.bold,
                                 color: Color(0xFF94A3B8),
                               ),
                             ),
-                            const Text(
+                            Text(
                               dropoffPoint,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
+                              style: const TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w600,
                                 color: Color(0xFF0F172A),

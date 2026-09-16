@@ -188,67 +188,132 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     );
   }
 
-  Widget _buildGenderDropdown() {
+  Widget _buildGenderRadioGroup() {
     return Container(
       decoration: BoxDecoration(
         color: AppTheme.inputColor,
         borderRadius: BorderRadius.circular(16),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      child: Row(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            padding: const EdgeInsets.all(6),
-            decoration: BoxDecoration(
-              color: AppTheme.primaryColor.withValues(alpha: 0.1),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              Icons.wc_outlined,
-              color: AppTheme.primaryColor,
-              size: 18,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<int>(
-                isExpanded: true,
-                hint: const Text(
-                  'เลือกเพศของคุณ (ชาย / หญิง / อื่นๆ)',
-                  style: TextStyle(color: Color(0xFF94A3B8), fontSize: 14),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryColor.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
                 ),
-                icon: const Padding(
-                  padding: EdgeInsets.only(right: 4.0),
-                  child: Icon(
-                    Icons.arrow_drop_down,
-                    color: Color(0xFF94A3B8),
-                  ),
+                child: const Icon(
+                  Icons.wc_outlined,
+                  color: AppTheme.primaryColor,
+                  size: 18,
                 ),
-                value: _selectedGender,
-                items: const [
-                  DropdownMenuItem(
-                    value: 1,
-                    child: Text('ชาย', style: TextStyle(fontSize: 15, color: Color(0xFF0F172A))),
-                  ),
-                  DropdownMenuItem(
-                    value: 2,
-                    child: Text('หญิง', style: TextStyle(fontSize: 15, color: Color(0xFF0F172A))),
-                  ),
-                  DropdownMenuItem(
-                    value: 3,
-                    child: Text('อื่นๆ', style: TextStyle(fontSize: 15, color: Color(0xFF0F172A))),
-                  ),
-                ],
-                onChanged: (value) {
-                  setState(() {
-                    _selectedGender = value;
-                  });
-                },
               ),
-            ),
+              const SizedBox(width: 10),
+              const Text(
+                'เพศของคุณ',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF0F172A),
+                ),
+              ),
+              const SizedBox(width: 4),
+              const Text(
+                '*',
+                style: TextStyle(
+                  color: Colors.red,
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              _buildGenderRadioOption(value: 1, label: 'ชาย', icon: Icons.male_rounded),
+              const SizedBox(width: 8),
+              _buildGenderRadioOption(value: 2, label: 'หญิง', icon: Icons.female_rounded),
+              const SizedBox(width: 8),
+              _buildGenderRadioOption(value: 3, label: 'อื่นๆ', icon: Icons.transgender_rounded),
+            ],
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildGenderRadioOption({
+    required int value,
+    required String label,
+    required IconData icon,
+  }) {
+    final isSelected = _selectedGender == value;
+    return Expanded(
+      child: InkWell(
+        onTap: () {
+          setState(() {
+            _selectedGender = value;
+          });
+        },
+        borderRadius: BorderRadius.circular(12),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+          decoration: BoxDecoration(
+            color: isSelected ? Colors.white : Colors.white.withValues(alpha: 0.6),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isSelected ? AppTheme.primaryColor : const Color(0xFFE2E8F0),
+              width: isSelected ? 1.5 : 1,
+            ),
+            boxShadow: isSelected
+                ? [
+                    BoxShadow(
+                      color: AppTheme.primaryColor.withValues(alpha: 0.12),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    ),
+                  ]
+                : null,
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Radio<int>(
+                value: value,
+                groupValue: _selectedGender,
+                onChanged: (val) {
+                  setState(() {
+                    _selectedGender = val;
+                  });
+                },
+                activeColor: AppTheme.primaryColor,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
+              ),
+              const SizedBox(width: 2),
+              Icon(
+                icon,
+                size: 16,
+                color: isSelected ? AppTheme.primaryColor : const Color(0xFF64748B),
+              ),
+              const SizedBox(width: 4),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                  color: isSelected ? AppTheme.primaryColor : const Color(0xFF334155),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -457,7 +522,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                 const SizedBox(height: 14),
 
                 // Gender
-                _buildGenderDropdown(),
+                _buildGenderRadioGroup(),
                 const SizedBox(height: 14),
 
                 // Email
@@ -500,6 +565,10 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                   subtitle: 'ข้อมูลรถยนต์ที่คุณจะใช้เรียกรถบริการ',
                 ),
 
+                // Car Type Dropdown (ระบบส่งกำลัง / ชนิดเกียร์)
+                _buildCarTypeDropdown(),
+                const SizedBox(height: 14),
+
                 // Car Brand
                 _buildTextFormField(
                   controller: _carBrandController,
@@ -534,10 +603,6 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                   icon: Icons.pin_outlined,
                   validator: AppValidators.validateCarPlate,
                 ),
-                const SizedBox(height: 14),
-
-                // Car Type Dropdown
-                _buildCarTypeDropdown(),
                 const SizedBox(height: 24),
 
                 // Terms & Conditions

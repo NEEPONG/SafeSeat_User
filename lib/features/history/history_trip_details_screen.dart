@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:safeseat_mini/core/services/geocoding_service.dart';
 import 'package:safeseat_mini/core/theme/app_theme.dart';
 import 'package:safeseat_mini/core/widgets/driver_avatar.dart';
 import 'package:safeseat_mini/data/models/driver_report_model.dart';
@@ -27,11 +28,31 @@ class _HistoryTripDetailsScreenState extends ConsumerState<HistoryTripDetailsScr
   bool _hasReported = false;
   DriverReportModel? _existingReport;
 
+  String? _pickupAddress;
+  String? _dropoffAddress;
+  bool _isLoadingAddresses = true;
+
   @override
   void initState() {
     super.initState();
     _checkReviewStatus();
     _checkReportStatus();
+    _loadLocationNames();
+  }
+
+  Future<void> _loadLocationNames() async {
+    final trip = widget.trip;
+    final results = await Future.wait([
+      GeocodingService.reverseGeocode(trip.pickupLatitude, trip.pickupLongitude),
+      GeocodingService.reverseGeocode(trip.dropoffLatitude, trip.dropoffLongitude),
+    ]);
+    if (mounted) {
+      setState(() {
+        _pickupAddress = results[0];
+        _dropoffAddress = results[1];
+        _isLoadingAddresses = false;
+      });
+    }
   }
 
   Future<void> _checkReviewStatus() async {
@@ -133,10 +154,12 @@ class _HistoryTripDetailsScreenState extends ConsumerState<HistoryTripDetailsScr
         ? 'สี $carColor'
         : (hasUserCar ? 'รถยนต์ส่วนบุคคล' : 'ไม่มีข้อมูลรายละเอียดรถ');
 
-    final pickupPoint = trip.note != null && trip.note!.isNotEmpty
-        ? trip.note!
-        : 'จุดรับ (${trip.pickupLatitude.toStringAsFixed(4)}, ${trip.pickupLongitude.toStringAsFixed(4)})';
-    final dropoffPoint = 'จุดส่ง (${trip.dropoffLatitude.toStringAsFixed(4)}, ${trip.dropoffLongitude.toStringAsFixed(4)})';
+    final pickupPoint = _pickupAddress ??
+        (trip.note != null && trip.note!.isNotEmpty
+            ? trip.note!
+            : 'จุดรับ (${trip.pickupLatitude.toStringAsFixed(4)}, ${trip.pickupLongitude.toStringAsFixed(4)})');
+    final dropoffPoint = _dropoffAddress ??
+        'จุดส่ง (${trip.dropoffLatitude.toStringAsFixed(4)}, ${trip.dropoffLongitude.toStringAsFixed(4)})';
 
     final paymentMethodText = trip.paymentMethod == 2
         ? 'ชำระด้วย SafeSeat Wallet'
@@ -298,7 +321,7 @@ class _HistoryTripDetailsScreenState extends ConsumerState<HistoryTripDetailsScr
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     const Text(
-                                      'PICKUP POINT',
+                                      'จุดรับ',
                                       style: TextStyle(
                                         fontSize: 9,
                                         fontWeight: FontWeight.bold,
@@ -306,18 +329,19 @@ class _HistoryTripDetailsScreenState extends ConsumerState<HistoryTripDetailsScr
                                       ),
                                     ),
                                     Text(
-                                      pickupPoint,
-                                      style: const TextStyle(
+                                      _isLoadingAddresses ? 'กำลังค้นหาชื่อสถานที่...' : pickupPoint,
+                                      style: TextStyle(
                                         fontSize: 12,
                                         fontWeight: FontWeight.w600,
-                                        color: Color(0xFF1E293B),
+                                        color: _isLoadingAddresses ? const Color(0xFF94A3B8) : const Color(0xFF1E293B),
+                                        fontStyle: _isLoadingAddresses ? FontStyle.italic : FontStyle.normal,
                                       ),
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                     ),
                                     const SizedBox(height: 8),
                                     const Text(
-                                      'DROP-OFF POINT',
+                                      'จุดส่ง',
                                       style: TextStyle(
                                         fontSize: 9,
                                         fontWeight: FontWeight.bold,
@@ -325,11 +349,12 @@ class _HistoryTripDetailsScreenState extends ConsumerState<HistoryTripDetailsScr
                                       ),
                                     ),
                                     Text(
-                                      dropoffPoint,
-                                      style: const TextStyle(
+                                      _isLoadingAddresses ? 'กำลังค้นหาชื่อสถานที่...' : dropoffPoint,
+                                      style: TextStyle(
                                         fontSize: 12,
                                         fontWeight: FontWeight.w600,
-                                        color: Color(0xFF1E293B),
+                                        color: _isLoadingAddresses ? const Color(0xFF94A3B8) : const Color(0xFF1E293B),
+                                        fontStyle: _isLoadingAddresses ? FontStyle.italic : FontStyle.normal,
                                       ),
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
@@ -370,6 +395,36 @@ class _HistoryTripDetailsScreenState extends ConsumerState<HistoryTripDetailsScr
                   ),
                 ),
               ),
+
+              // User remark / note if present
+              if (trip.note != null && trip.note!.trim().isNotEmpty && trip.note != _pickupAddress)
+                Padding(
+                  padding: const EdgeInsets.only(left: 20.0, right: 20.0, top: 12.0),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.sticky_note_2_outlined, size: 18, color: Color(0xFF64748B)),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'หมายเหตุ: ${trip.note!.trim()}',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFF475569),
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
 
               // 3. Driver Info Section
               Padding(
@@ -847,6 +902,8 @@ class _HistoryTripDetailsScreenState extends ConsumerState<HistoryTripDetailsScr
                                 builder: (context) => HistoryTripReviewScreen(
                                   trip: trip,
                                   existingReviews: _hasReviewed ? _existingReviews : null,
+                                  pickupAddress: _pickupAddress,
+                                  dropoffAddress: _dropoffAddress,
                                 ),
                               ),
                             );
@@ -888,7 +945,11 @@ class _HistoryTripDetailsScreenState extends ConsumerState<HistoryTripDetailsScr
                             } else {
                               await Navigator.of(context).push(
                                 MaterialPageRoute(
-                                  builder: (context) => HistoryTripReportScreen(trip: trip),
+                                  builder: (context) => HistoryTripReportScreen(
+                                    trip: trip,
+                                    pickupAddress: _pickupAddress,
+                                    dropoffAddress: _dropoffAddress,
+                                  ),
                                 ),
                               );
                             }
