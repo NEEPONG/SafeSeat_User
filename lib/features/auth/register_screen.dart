@@ -57,11 +57,17 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       if (_selectedGender == null) {
         AppSnackBar.showWarning(context, 'กรุณาระบุเพศของคุณ');
       } else if (_selectedCarType == null) {
-        AppSnackBar.showWarning(context, 'กรุณาเลือกระบบส่งกำลัง / ชนิดเกียร์ของรถ (Auto / Manual / EV)');
+        AppSnackBar.showWarning(context, 'กรุณาเลือกประเภทรถของคุณ');
       } else if (!_acceptTerms) {
-        AppSnackBar.showWarning(context, 'กรุณายอมรับข้อกำหนดและนโยบายความเป็นส่วนตัว');
+        AppSnackBar.showWarning(
+          context,
+          'กรุณายอมรับข้อกำหนดและนโยบายความเป็นส่วนตัว',
+        );
       } else {
-        AppSnackBar.showWarning(context, 'กรุณากรอกข้อมูลให้ถูกต้องครบถ้วนตามคำแนะนำ');
+        AppSnackBar.showWarning(
+          context,
+          'กรุณากรอกข้อมูลให้ถูกต้องครบถ้วนตามคำแนะนำ',
+        );
       }
       return;
     }
@@ -90,7 +96,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     if (mounted) {
       if (errorMsg == null) {
         Navigator.pop(context);
-        AppSnackBar.showSuccess(context, 'สร้างบัญชีผู้ใช้และบันทึกยานพาหนะสำเร็จ');
+        AppSnackBar.showSuccess(context, 'สมัครสมาชิกและบันทึกข้อมูลรถแล้ว');
       } else {
         AppSnackBar.showError(context, errorMsg);
       }
@@ -116,12 +122,14 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
               child: Icon(icon, color: AppTheme.primaryColor, size: 20),
             ),
             const SizedBox(width: 10),
-            Text(
-              title,
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF0F172A),
+            Expanded(
+              child: Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: AppTheme.textPrimary,
+                ),
               ),
             ),
           ],
@@ -129,10 +137,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         const SizedBox(height: 4),
         Text(
           subtitle,
-          style: const TextStyle(
-            fontSize: 13,
-            color: Color(0xFF64748B),
-          ),
+          style: const TextStyle(fontSize: 14, color: AppTheme.textSecondary),
         ),
         const SizedBox(height: 16),
       ],
@@ -148,107 +153,199 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     Widget? suffixIcon,
     String? Function(String?)? validator,
   }) {
+    final label = hintText.split(' (').first;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            color: AppTheme.textPrimary,
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 7),
+        TextFormField(
+          controller: controller,
+          keyboardType: keyboardType,
+          obscureText: obscureText,
+          validator: validator,
+          style: const TextStyle(fontSize: 15, color: AppTheme.textPrimary),
+          decoration: InputDecoration(
+            hintText: hintText,
+            hintStyle: const TextStyle(color: AppTheme.textMuted, fontSize: 14),
+            prefixIcon: Icon(icon, color: AppTheme.primaryColor, size: 21),
+            suffixIcon: suffixIcon,
+            errorStyle: const TextStyle(height: 0.9, fontSize: 12),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildGenderRadioGroup() {
     return Container(
       decoration: BoxDecoration(
         color: AppTheme.inputColor,
         borderRadius: BorderRadius.circular(16),
       ),
-      child: TextFormField(
-        controller: controller,
-        keyboardType: keyboardType,
-        obscureText: obscureText,
-        validator: validator,
-        style: const TextStyle(
-          fontSize: 15,
-          color: Color(0xFF0F172A),
-        ),
-        decoration: InputDecoration(
-          hintText: hintText,
-          hintStyle: const TextStyle(
-            color: Color(0xFF94A3B8),
-            fontSize: 14,
-          ),
-          prefixIcon: Padding(
-            padding: const EdgeInsets.all(12.0),
-            child: Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: AppTheme.primaryColor.withValues(alpha: 0.1),
-                shape: BoxShape.circle,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryColor.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.wc_outlined,
+                  color: AppTheme.primaryColor,
+                  size: 18,
+                ),
               ),
-              child: Icon(icon, color: AppTheme.primaryColor, size: 18),
+              const SizedBox(width: 10),
+              const Text(
+                'เพศของคุณ',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF0F172A),
+                ),
+              ),
+              const SizedBox(width: 4),
+              const Text(
+                '*',
+                style: TextStyle(
+                  color: Colors.red,
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          RadioGroup<int>(
+            groupValue: _selectedGender,
+            onChanged: (value) => setState(() => _selectedGender = value),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final stacked =
+                    constraints.maxWidth < 350 ||
+                    MediaQuery.textScalerOf(context).scale(14) > 18;
+                final options = [
+                  _buildGenderRadioOption(
+                    value: 1,
+                    label: 'ชาย',
+                    icon: Icons.male_rounded,
+                  ),
+                  _buildGenderRadioOption(
+                    value: 2,
+                    label: 'หญิง',
+                    icon: Icons.female_rounded,
+                  ),
+                  _buildGenderRadioOption(
+                    value: 3,
+                    label: 'อื่นๆ',
+                    icon: Icons.transgender_rounded,
+                  ),
+                ];
+                if (stacked) {
+                  return Column(
+                    children: [
+                      for (final option in options) ...[
+                        SizedBox(width: double.infinity, child: option),
+                        const SizedBox(height: 8),
+                      ],
+                    ],
+                  );
+                }
+                return Row(
+                  children: [
+                    Expanded(child: options[0]),
+                    const SizedBox(width: 8),
+                    Expanded(child: options[1]),
+                    const SizedBox(width: 8),
+                    Expanded(child: options[2]),
+                  ],
+                );
+              },
             ),
           ),
-          suffixIcon: suffixIcon,
-          border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
-          errorStyle: const TextStyle(height: 0.9, fontSize: 12),
-        ),
+        ],
       ),
     );
   }
 
-  Widget _buildGenderDropdown() {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppTheme.inputColor,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(6),
-            decoration: BoxDecoration(
-              color: AppTheme.primaryColor.withValues(alpha: 0.1),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              Icons.wc_outlined,
-              color: AppTheme.primaryColor,
-              size: 18,
-            ),
+  Widget _buildGenderRadioOption({
+    required int value,
+    required String label,
+    required IconData icon,
+  }) {
+    final isSelected = _selectedGender == value;
+    return InkWell(
+      onTap: () {
+        setState(() {
+          _selectedGender = value;
+        });
+      },
+      borderRadius: BorderRadius.circular(12),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? Colors.white
+              : Colors.white.withValues(alpha: 0.6),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected ? AppTheme.primaryColor : const Color(0xFFE2E8F0),
+            width: isSelected ? 1.5 : 1,
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<int>(
-                isExpanded: true,
-                hint: const Text(
-                  'เลือกเพศของคุณ (ชาย / หญิง / อื่นๆ)',
-                  style: TextStyle(color: Color(0xFF94A3B8), fontSize: 14),
-                ),
-                icon: const Padding(
-                  padding: EdgeInsets.only(right: 4.0),
-                  child: Icon(
-                    Icons.arrow_drop_down,
-                    color: Color(0xFF94A3B8),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: AppTheme.primaryColor.withValues(alpha: 0.12),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
                   ),
-                ),
-                value: _selectedGender,
-                items: const [
-                  DropdownMenuItem(
-                    value: 1,
-                    child: Text('ชาย', style: TextStyle(fontSize: 15, color: Color(0xFF0F172A))),
-                  ),
-                  DropdownMenuItem(
-                    value: 2,
-                    child: Text('หญิง', style: TextStyle(fontSize: 15, color: Color(0xFF0F172A))),
-                  ),
-                  DropdownMenuItem(
-                    value: 3,
-                    child: Text('อื่นๆ', style: TextStyle(fontSize: 15, color: Color(0xFF0F172A))),
-                  ),
-                ],
-                onChanged: (value) {
-                  setState(() {
-                    _selectedGender = value;
-                  });
-                },
+                ]
+              : null,
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Radio<int>(
+              value: value,
+              activeColor: AppTheme.primaryColor,
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
+            ),
+            const SizedBox(width: 2),
+            Icon(
+              icon,
+              size: 16,
+              color: isSelected
+                  ? AppTheme.primaryColor
+                  : const Color(0xFF64748B),
+            ),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                color: isSelected
+                    ? AppTheme.primaryColor
+                    : const Color(0xFF334155),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -260,8 +357,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       data: (carTypes) {
         return Container(
           decoration: BoxDecoration(
-            color: AppTheme.inputColor,
+            color: AppTheme.surfaceColor,
             borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppTheme.borderColor),
           ),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
           child: Row(
@@ -284,7 +382,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                   child: DropdownButton<int>(
                     isExpanded: true,
                     hint: const Text(
-                      'เลือกระบบส่งกำลัง / ชนิดเกียร์ (Auto, Manual, EV)',
+                      'เลือกประเภทรถ',
                       style: TextStyle(color: Color(0xFF94A3B8), fontSize: 14),
                     ),
                     icon: const Padding(
@@ -299,8 +397,11 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                       return DropdownMenuItem<int>(
                         value: type.carTypeId,
                         child: Text(
-                          type.carTypeName,
-                          style: const TextStyle(fontSize: 15, color: Color(0xFF0F172A)),
+                          _carTypeLabel(type.carTypeName),
+                          style: const TextStyle(
+                            fontSize: 15,
+                            color: Color(0xFF0F172A),
+                          ),
                         ),
                       );
                     }).toList(),
@@ -343,6 +444,21 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         ),
       ),
     );
+  }
+
+  String _carTypeLabel(String name) {
+    switch (name.trim().toLowerCase()) {
+      case 'ev':
+      case 'electric':
+        return 'รถไฟฟ้า';
+      case 'manual':
+        return 'เกียร์ธรรมดา';
+      case 'auto':
+      case 'automatic':
+        return 'เกียร์อัตโนมัติ';
+      default:
+        return name;
+    }
   }
 
   Widget _buildTermsCheckbox() {
@@ -408,199 +524,218 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         ),
       ),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 12.0),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'สร้างบัญชีผู้ใช้ใหม่',
-                  style: TextStyle(
-                    fontSize: 26,
-                    fontWeight: FontWeight.w900,
-                    color: Color(0xFF1E293B),
-                  ),
-                ),
-                const SizedBox(height: 6),
-                const Text(
-                  'กรอกข้อมูลส่วนตัวและยานพาหนะเริ่มต้น เพื่อเริ่มต้นรับบริการคนขับอย่างปลอดภัย',
-                  style: TextStyle(color: Color(0xFF64748B), fontSize: 13, height: 1.4),
-                ),
-                const SizedBox(height: 24),
-
-                // SECTION 1: ข้อมูลส่วนตัว
-                _buildSectionHeader(
-                  icon: Icons.person_outline,
-                  title: '1. ข้อมูลส่วนบุคคล',
-                  subtitle: 'ข้อมูลสำหรับเข้าสู่ระบบและระบุตัวตน',
-                ),
-
-                // Phone
-                _buildTextFormField(
-                  controller: _phoneController,
-                  hintText: 'เบอร์มือถือ 10 หลัก (เช่น 0812345678)',
-                  icon: Icons.phone_outlined,
-                  keyboardType: TextInputType.phone,
-                  validator: AppValidators.validatePhone,
-                ),
-                const SizedBox(height: 14),
-
-                // Name
-                _buildTextFormField(
-                  controller: _nameController,
-                  hintText: 'ชื่อ-นามสกุล (ภาษาไทยหรืออังกฤษ 2-50 ตัวอักษร)',
-                  icon: Icons.badge_outlined,
-                  validator: AppValidators.validateName,
-                ),
-                const SizedBox(height: 14),
-
-                // Gender
-                _buildGenderDropdown(),
-                const SizedBox(height: 14),
-
-                // Email
-                _buildTextFormField(
-                  controller: _emailController,
-                  hintText: 'อีเมล (เช่น user@example.com)',
-                  icon: Icons.email_outlined,
-                  keyboardType: TextInputType.emailAddress,
-                  validator: AppValidators.validateEmail,
-                ),
-                const SizedBox(height: 14),
-
-                // Password
-                _buildTextFormField(
-                  controller: _passwordController,
-                  hintText: 'รหัสผ่าน 8-50 ตัวอักษร (อังกฤษ, ตัวเลข หรือ !#_.)',
-                  icon: Icons.lock_outline,
-                  obscureText: _obscurePassword,
-                  validator: AppValidators.validatePassword,
-                  suffixIcon: IconButton(
-                    icon: Icon(
-                      _obscurePassword
-                          ? Icons.visibility_off
-                          : Icons.visibility,
-                      color: const Color(0xFF94A3B8),
-                    ),
-                    onPressed: () {
-                      setState(() {
-                        _obscurePassword = !_obscurePassword;
-                      });
-                    },
-                  ),
-                ),
-                const SizedBox(height: 28),
-
-                // SECTION 2: ข้อมูลยานพาหนะเริ่มต้น
-                _buildSectionHeader(
-                  icon: Icons.directions_car_outlined,
-                  title: '2. ข้อมูลยานพาหนะเริ่มต้น (1 คัน)',
-                  subtitle: 'ข้อมูลรถยนต์ที่คุณจะใช้เรียกรถบริการ',
-                ),
-
-                // Car Brand
-                _buildTextFormField(
-                  controller: _carBrandController,
-                  hintText: 'ยี่ห้อรถยนต์ (เช่น Toyota, Honda, Mazda)',
-                  icon: Icons.branding_watermark_outlined,
-                  validator: AppValidators.validateCarBrand,
-                ),
-                const SizedBox(height: 14),
-
-                // Car Model
-                _buildTextFormField(
-                  controller: _carModelController,
-                  hintText: 'รุ่นรถยนต์ (เช่น Camry, Civic, City)',
-                  icon: Icons.car_repair_outlined,
-                  validator: AppValidators.validateCarModel,
-                ),
-                const SizedBox(height: 14),
-
-                // Car Color
-                _buildTextFormField(
-                  controller: _carColorController,
-                  hintText: 'สีรถ (เช่น ดำ, ขาว, เทา, บรอนซ์เงิน)',
-                  icon: Icons.color_lens_outlined,
-                  validator: AppValidators.validateCarColor,
-                ),
-                const SizedBox(height: 14),
-
-                // Car Plate
-                _buildTextFormField(
-                  controller: _carPlateController,
-                  hintText: 'ป้ายทะเบียน (เช่น กค-1234, 1กข-9999)',
-                  icon: Icons.pin_outlined,
-                  validator: AppValidators.validateCarPlate,
-                ),
-                const SizedBox(height: 14),
-
-                // Car Type Dropdown
-                _buildCarTypeDropdown(),
-                const SizedBox(height: 24),
-
-                // Terms & Conditions
-                _buildTermsCheckbox(),
-                const SizedBox(height: 28),
-
-                // Submit Button
-                SizedBox(
-                  width: double.infinity,
-                  height: 54,
-                  child: ElevatedButton(
-                    onPressed: isLoading ? null : _register,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.primaryColor,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      elevation: 4,
-                      shadowColor: AppTheme.primaryColor.withValues(alpha: 0.4),
-                    ),
-                    child: isLoading
-                        ? const SizedBox(
-                            width: 24,
-                            height: 24,
-                            child: CircularProgressIndicator(
-                              color: Colors.white,
-                              strokeWidth: 3,
-                            ),
-                          )
-                        : const Text(
-                            'สร้างบัญชีและบันทึกรถยนต์',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                  ),
-                ),
-                const SizedBox(height: 20),
-
-                // Already have account
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 640),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 24.0,
+                vertical: 12.0,
+              ),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      'มีบัญชีอยู่แล้ว? ',
-                      style: TextStyle(color: Color(0xFF64748B)),
-                    ),
-                    GestureDetector(
-                      onTap: () => Navigator.pop(context),
-                      child: const Text(
-                        'เข้าสู่ระบบ',
-                        style: TextStyle(
-                          color: AppTheme.primaryColor,
-                          fontWeight: FontWeight.bold,
-                        ),
+                      'สมัครสมาชิก',
+                      style: TextStyle(
+                        fontSize: 26,
+                        fontWeight: FontWeight.w900,
+                        color: Color(0xFF1E293B),
                       ),
                     ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      'กรอกข้อมูลของคุณและรถคันแรกเพื่อเริ่มใช้บริการ',
+                      style: TextStyle(
+                        color: Color(0xFF64748B),
+                        fontSize: 13,
+                        height: 1.4,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+
+                    // SECTION 1: ข้อมูลส่วนตัว
+                    _buildSectionHeader(
+                      icon: Icons.person_outline,
+                      title: '1. ข้อมูลของคุณ',
+                      subtitle: 'ข้อมูลสำหรับเข้าสู่ระบบและระบุตัวตน',
+                    ),
+
+                    // Phone
+                    _buildTextFormField(
+                      controller: _phoneController,
+                      hintText: 'เบอร์มือถือ 10 หลัก (เช่น 0812345678)',
+                      icon: Icons.phone_outlined,
+                      keyboardType: TextInputType.phone,
+                      validator: AppValidators.validatePhone,
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Name
+                    _buildTextFormField(
+                      controller: _nameController,
+                      hintText:
+                          'ชื่อ-นามสกุล (ภาษาไทยหรืออังกฤษ 2-50 ตัวอักษร)',
+                      icon: Icons.badge_outlined,
+                      validator: AppValidators.validateName,
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Gender
+                    _buildGenderRadioGroup(),
+                    const SizedBox(height: 14),
+
+                    // Email
+                    _buildTextFormField(
+                      controller: _emailController,
+                      hintText: 'อีเมล (เช่น user@example.com)',
+                      icon: Icons.email_outlined,
+                      keyboardType: TextInputType.emailAddress,
+                      validator: AppValidators.validateEmail,
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Password
+                    _buildTextFormField(
+                      controller: _passwordController,
+                      hintText:
+                          'รหัสผ่าน 8-50 ตัวอักษร (อังกฤษ, ตัวเลข หรือ !#_.)',
+                      icon: Icons.lock_outline,
+                      obscureText: _obscurePassword,
+                      validator: AppValidators.validatePassword,
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          _obscurePassword
+                              ? Icons.visibility_off
+                              : Icons.visibility,
+                          color: const Color(0xFF94A3B8),
+                        ),
+                        onPressed: () {
+                          setState(() {
+                            _obscurePassword = !_obscurePassword;
+                          });
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 28),
+
+                    // SECTION 2: ข้อมูลรถคันแรก
+                    _buildSectionHeader(
+                      icon: Icons.directions_car_outlined,
+                      title: '2. รถคันแรกของคุณ',
+                      subtitle: 'รถที่ต้องการให้คนขับมาขับ',
+                    ),
+
+                    // Car Type Dropdown
+                    const Text(
+                      'ประเภทรถ',
+                      style: TextStyle(
+                        color: AppTheme.textPrimary,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 7),
+                    _buildCarTypeDropdown(),
+                    const SizedBox(height: 14),
+
+                    // Car Brand
+                    _buildTextFormField(
+                      controller: _carBrandController,
+                      hintText: 'ยี่ห้อรถยนต์ (เช่น Toyota, Honda, Mazda)',
+                      icon: Icons.branding_watermark_outlined,
+                      validator: AppValidators.validateCarBrand,
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Car Model
+                    _buildTextFormField(
+                      controller: _carModelController,
+                      hintText: 'รุ่นรถยนต์ (เช่น Camry, Civic, City)',
+                      icon: Icons.car_repair_outlined,
+                      validator: AppValidators.validateCarModel,
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Car Color
+                    _buildTextFormField(
+                      controller: _carColorController,
+                      hintText: 'สีรถ (เช่น ดำ, ขาว, เทา, บรอนซ์เงิน)',
+                      icon: Icons.color_lens_outlined,
+                      validator: AppValidators.validateCarColor,
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Car Plate
+                    _buildTextFormField(
+                      controller: _carPlateController,
+                      hintText: 'ป้ายทะเบียน (เช่น กค-1234, 1กข-9999)',
+                      icon: Icons.pin_outlined,
+                      validator: AppValidators.validateCarPlate,
+                    ),
+                    const SizedBox(height: 24),
+
+                    // Terms & Conditions
+                    _buildTermsCheckbox(),
+                    const SizedBox(height: 28),
+
+                    // Submit Button
+                    SizedBox(
+                      width: double.infinity,
+                      height: 54,
+                      child: ElevatedButton(
+                        onPressed: isLoading ? null : _register,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.primaryColor,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          elevation: 4,
+                          shadowColor: AppTheme.primaryColor.withValues(
+                            alpha: 0.4,
+                          ),
+                        ),
+                        child: isLoading
+                            ? const SizedBox(
+                                width: 24,
+                                height: 24,
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 3,
+                                ),
+                              )
+                            : const Text(
+                                'สมัครสมาชิก',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+
+                    // Already have account
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Text(
+                          'มีบัญชีอยู่แล้ว? ',
+                          style: TextStyle(color: Color(0xFF64748B)),
+                        ),
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('เข้าสู่ระบบ'),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
                   ],
                 ),
-                const SizedBox(height: 20),
-              ],
+              ),
             ),
           ),
         ),

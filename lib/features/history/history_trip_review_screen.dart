@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:safeseat_mini/core/services/geocoding_service.dart';
 import 'package:safeseat_mini/core/theme/app_theme.dart';
 import 'package:safeseat_mini/core/utils/app_feedback.dart';
 import 'package:safeseat_mini/core/utils/validators.dart';
@@ -11,29 +12,60 @@ import 'package:safeseat_mini/features/history/controllers/history_controller.da
 class HistoryTripReviewScreen extends ConsumerStatefulWidget {
   final RequestDriverModel trip;
   final List<ReviewModel>? existingReviews;
+  final String? pickupAddress;
+  final String? dropoffAddress;
 
   const HistoryTripReviewScreen({
     super.key,
     required this.trip,
     this.existingReviews,
+    this.pickupAddress,
+    this.dropoffAddress,
   });
 
   @override
-  ConsumerState<HistoryTripReviewScreen> createState() => _HistoryTripReviewScreenState();
+  ConsumerState<HistoryTripReviewScreen> createState() =>
+      _HistoryTripReviewScreenState();
 }
 
-class _HistoryTripReviewScreenState extends ConsumerState<HistoryTripReviewScreen> {
+class _HistoryTripReviewScreenState
+    extends ConsumerState<HistoryTripReviewScreen> {
   final _formKey = GlobalKey<FormState>();
   int _driverRating = 0;
   int _coDriverRating = 0;
-  final TextEditingController _driverCommentController = TextEditingController();
-  final TextEditingController _coDriverCommentController = TextEditingController();
+  final TextEditingController _driverCommentController =
+      TextEditingController();
+  final TextEditingController _coDriverCommentController =
+      TextEditingController();
+  String? _pickupAddress;
+  String? _dropoffAddress;
+  bool _isLoadingPickupAddress = false;
+  bool _isLoadingDropoffAddress = false;
 
-  bool get isReadOnly => widget.existingReviews != null && widget.existingReviews!.isNotEmpty;
+  bool get isReadOnly =>
+      widget.existingReviews != null && widget.existingReviews!.isNotEmpty;
 
   @override
   void initState() {
     super.initState();
+    _pickupAddress = widget.pickupAddress;
+    _dropoffAddress = widget.dropoffAddress;
+    if (_pickupAddress == null) {
+      _isLoadingPickupAddress = true;
+      _resolveAddress(
+        widget.trip.pickupLatitude,
+        widget.trip.pickupLongitude,
+        isPickup: true,
+      );
+    }
+    if (_dropoffAddress == null) {
+      _isLoadingDropoffAddress = true;
+      _resolveAddress(
+        widget.trip.dropoffLatitude,
+        widget.trip.dropoffLongitude,
+        isPickup: false,
+      );
+    }
     final reviews = widget.existingReviews;
     if (reviews != null && reviews.isNotEmpty) {
       // Leader review
@@ -68,6 +100,29 @@ class _HistoryTripReviewScreenState extends ConsumerState<HistoryTripReviewScree
     }
   }
 
+  Future<void> _resolveAddress(
+    double latitude,
+    double longitude, {
+    required bool isPickup,
+  }) async {
+    String? name;
+    try {
+      name = await GeocodingService.reverseGeocode(latitude, longitude);
+    } catch (_) {
+      // The page keeps a readable fallback if the lookup fails.
+    }
+    if (!mounted) return;
+    setState(() {
+      if (isPickup) {
+        _pickupAddress = name;
+        _isLoadingPickupAddress = false;
+      } else {
+        _dropoffAddress = name;
+        _isLoadingDropoffAddress = false;
+      }
+    });
+  }
+
   @override
   void dispose() {
     _driverCommentController.dispose();
@@ -82,14 +137,23 @@ class _HistoryTripReviewScreenState extends ConsumerState<HistoryTripReviewScree
       children: List.generate(5, (index) {
         final starIndex = index + 1;
         final isSelected = starIndex <= currentRating;
-        return GestureDetector(
-          onTap: isReadOnlyMode ? null : () => onRatingChanged(starIndex),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 6.0),
-            child: Icon(
-              isSelected ? Icons.star_rounded : Icons.star_border_rounded,
-              color: isSelected ? Colors.amber : const Color(0xFFCBD5E1),
-              size: 40,
+        return Flexible(
+          child: Semantics(
+            label: '$starIndex ดาว',
+            button: !isReadOnlyMode,
+            child: GestureDetector(
+              onTap: isReadOnlyMode ? null : () => onRatingChanged(starIndex),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 2.0,
+                  vertical: 4,
+                ),
+                child: Icon(
+                  isSelected ? Icons.star_rounded : Icons.star_border_rounded,
+                  color: isSelected ? Colors.amber : const Color(0xFFCBD5E1),
+                  size: 36,
+                ),
+              ),
             ),
           ),
         );
@@ -135,7 +199,9 @@ class _HistoryTripReviewScreenState extends ConsumerState<HistoryTripReviewScree
                 radius: 30,
                 badgeText: badgeText,
                 badgeColor: badgeColor,
-                defaultIcon: role.toLowerCase().contains('co') ? Icons.motorcycle : Icons.person,
+                defaultIcon: badgeText == 'D2'
+                    ? Icons.motorcycle
+                    : Icons.person,
               ),
               const SizedBox(width: 16),
               Expanded(
@@ -147,7 +213,7 @@ class _HistoryTripReviewScreenState extends ConsumerState<HistoryTripReviewScree
                       style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
-                        color: Color(0xFF0F172A),
+                        color: AppTheme.textPrimary,
                       ),
                     ),
                     const SizedBox(height: 2),
@@ -155,7 +221,7 @@ class _HistoryTripReviewScreenState extends ConsumerState<HistoryTripReviewScree
                       role,
                       style: const TextStyle(
                         fontSize: 13,
-                        color: Color(0xFF64748B),
+                        color: AppTheme.textSecondary,
                       ),
                     ),
                   ],
@@ -170,7 +236,7 @@ class _HistoryTripReviewScreenState extends ConsumerState<HistoryTripReviewScree
             style: const TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w600,
-              color: Color(0xFF0F172A),
+              color: AppTheme.textPrimary,
             ),
           ),
           const SizedBox(height: 12),
@@ -179,11 +245,11 @@ class _HistoryTripReviewScreenState extends ConsumerState<HistoryTripReviewScree
           const SizedBox(height: 16),
           // Comment box label
           const Text(
-            'ความคิดเห็นเพิ่มเติมสำหรับผู้ช่วยผู้ขับรถ',
+            'ความคิดเห็นเพิ่มเติม',
             style: TextStyle(
-              fontSize: 11,
+              fontSize: 14,
               fontWeight: FontWeight.bold,
-              color: Color(0xFF64748B),
+              color: AppTheme.textSecondary,
             ),
           ),
           const SizedBox(height: 8),
@@ -196,17 +262,15 @@ class _HistoryTripReviewScreenState extends ConsumerState<HistoryTripReviewScree
             decoration: InputDecoration(
               hintText: 'บอกเราเกี่ยวกับประสบการณ์ของคุณ',
               hintStyle: const TextStyle(
-                color: Color(0xFF94A3B8),
-                fontSize: 13,
+                color: AppTheme.textMuted,
+                fontSize: 14,
               ),
-              fillColor: const Color(0xFFF8FAFC),
+              fillColor: AppTheme.backgroundColor,
               filled: true,
               contentPadding: const EdgeInsets.all(16),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(16),
-                borderSide: const BorderSide(
-                  color: Color(0xFFE2E8F0),
-                ),
+                borderSide: const BorderSide(color: AppTheme.borderColor),
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(16),
@@ -217,19 +281,14 @@ class _HistoryTripReviewScreenState extends ConsumerState<HistoryTripReviewScree
               ),
               errorBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(16),
-                borderSide: const BorderSide(
-                  color: Colors.red,
-                ),
+                borderSide: const BorderSide(color: Colors.red),
               ),
               focusedErrorBorder: const OutlineInputBorder(
                 borderRadius: BorderRadius.all(Radius.circular(16)),
-                borderSide: BorderSide(
-                  color: Colors.red,
-                  width: 1.5,
-                ),
+                borderSide: BorderSide(color: Colors.red, width: 1.5),
               ),
             ),
-            style: const TextStyle(fontSize: 13),
+            style: const TextStyle(fontSize: 14),
           ),
         ],
       ),
@@ -239,38 +298,42 @@ class _HistoryTripReviewScreenState extends ConsumerState<HistoryTripReviewScree
   @override
   Widget build(BuildContext context) {
     final orderCode = '#ORD${widget.trip.requestId.toString().padLeft(4, '0')}';
-    
-    // Real or mock drivers check
+
+    // Show only drivers actually assigned to this trip.
+    final hasLeader = widget.trip.leader != null;
+    final hasFollower = widget.trip.follower != null;
     final driverName = widget.trip.leader != null
         ? '${widget.trip.leader!.firstname} ${widget.trip.leader!.lastname}'
-        : 'นายไอติม สุดหล่อเท่';
-        
+        : 'ยังไม่มีคนขับหลัก';
+
     final coDriverName = widget.trip.follower != null
         ? '${widget.trip.follower!.firstname} ${widget.trip.follower!.lastname}'
-        : 'คุณหญิงนิ่ม สุดสวยเท่';
+        : 'ยังไม่มีผู้ช่วยคนขับ';
 
-    final pickupPoint = widget.trip.note != null && widget.trip.note!.isNotEmpty
-        ? widget.trip.note!
-        : 'ผับคุณหนูนิ่มประจำเชียงใหม่';
-    const dropoffPoint = 'บ้านนิ่มเชียงใหม่แสนไกล';
+    final pickupPoint = _isLoadingPickupAddress
+        ? 'กำลังค้นหาชื่อสถานที่...'
+        : (_pickupAddress ?? 'ไม่พบชื่อสถานที่');
+    final dropoffPoint = _isLoadingDropoffAddress
+        ? 'กำลังค้นหาชื่อสถานที่...'
+        : (_dropoffAddress ?? 'ไม่พบชื่อสถานที่');
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
         scrolledUnderElevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Color(0xFF0F172A)),
+          icon: const Icon(Icons.arrow_back, color: AppTheme.textPrimary),
           onPressed: () => Navigator.of(context).pop(),
         ),
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              isReadOnly ? 'รีวิวของคุณ' : 'Review Trip',
+              isReadOnly ? 'รีวิวของคุณ' : 'รีวิวการเดินทาง',
               style: const TextStyle(
-                color: Color(0xFF0F172A),
+                color: AppTheme.textPrimary,
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
               ),
@@ -278,178 +341,196 @@ class _HistoryTripReviewScreenState extends ConsumerState<HistoryTripReviewScree
             Text(
               orderCode,
               style: const TextStyle(
-                color: Color(0xFF64748B),
+                color: AppTheme.textSecondary,
                 fontSize: 11,
               ),
             ),
           ],
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.account_circle_outlined, color: Color(0xFF0F172A)),
-            onPressed: () {},
-          ),
-        ],
       ),
       body: SafeArea(
         child: Column(
           children: [
             Expanded(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20.0,
+                  vertical: 16.0,
+                ),
                 child: Form(
                   key: _formKey,
                   child: Column(
                     children: [
-                    // 1. Trip Locations Card
-                    Container(
-                      padding: const EdgeInsets.all(16.0),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: const Color(0xFFF1F5F9)),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.02),
-                            blurRadius: 10,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: Row(
-                        children: [
-                          // Timeline indicators
-                          Column(
-                            children: [
-                              const Icon(Icons.location_on, color: Colors.blue, size: 20),
-                              Container(
-                                width: 1.5,
-                                height: 20,
-                                color: Colors.grey[300],
-                              ),
-                              const Icon(Icons.radio_button_checked, color: Colors.black, size: 20),
-                            ],
-                          ),
-                          const SizedBox(width: 12),
-                          // Location details
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                      // 1. Trip Locations Card
+                      Container(
+                        padding: const EdgeInsets.all(16.0),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: const Color(0xFFF1F5F9)),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.02),
+                              blurRadius: 10,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          children: [
+                            // Timeline indicators
+                            Column(
                               children: [
-                                const Text(
-                                  'PICKUP POINT',
-                                  style: TextStyle(
-                                    fontSize: 9,
-                                    fontWeight: FontWeight.bold,
-                                    color: Color(0xFF94A3B8),
-                                  ),
+                                const Icon(
+                                  Icons.location_on,
+                                  color: AppTheme.pickupColor,
+                                  size: 20,
                                 ),
-                                Text(
-                                  pickupPoint,
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                    color: Color(0xFF1E293B),
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
+                                Container(
+                                  width: 1.5,
+                                  height: 20,
+                                  color: Colors.grey[300],
                                 ),
-                                const SizedBox(height: 8),
-                                const Text(
-                                  'DROP-OFF POINT',
-                                  style: TextStyle(
-                                    fontSize: 9,
-                                    fontWeight: FontWeight.bold,
-                                    color: Color(0xFF94A3B8),
-                                  ),
-                                ),
-                                Text(
-                                  dropoffPoint,
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                    color: Color(0xFF1E293B),
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
+                                const Icon(
+                                  Icons.flag,
+                                  color: AppTheme.dropoffColor,
+                                  size: 20,
                                 ),
                               ],
                             ),
-                          ),
-                          const SizedBox(width: 12),
-                          // Distance info
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              const Text(
-                                'TOTAL DISTANCE',
-                                style: TextStyle(
-                                  fontSize: 9,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFF94A3B8),
-                                ),
+                            const SizedBox(width: 12),
+                            // Location details
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'จุดรับ',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                      color: AppTheme.textMuted,
+                                    ),
+                                  ),
+                                  Text(
+                                    pickupPoint,
+                                    style: const TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppTheme.textPrimary,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  const SizedBox(height: 8),
+                                  const Text(
+                                    'จุดส่ง',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                      color: AppTheme.textMuted,
+                                    ),
+                                  ),
+                                  Text(
+                                    dropoffPoint,
+                                    style: const TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppTheme.textPrimary,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
                               ),
-                              const SizedBox(height: 2),
-                              Text(
-                                '${widget.trip.reqDistance.toStringAsFixed(1)} KM',
-                                style: const TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFF0F3D8A),
+                            ),
+                            const SizedBox(width: 12),
+                            // Distance info
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Text(
+                                  'ระยะทาง',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppTheme.textMuted,
+                                  ),
                                 ),
-                              ),
-                            ],
-                          ),
-                        ],
+                                const SizedBox(height: 2),
+                                Text(
+                                  '${widget.trip.reqDistance.toStringAsFixed(1)} กม.',
+                                  style: const TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF0F3D8A),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 16),
+                      const SizedBox(height: 16),
 
-                    // 2. Driver Review Card
-                    _buildReviewCard(
-                      name: driverName,
-                      role: 'Driver',
-                      avatarUrl: widget.trip.leader?.resolvedImageUrl,
-                      ratingLabel: 'Rate your driver',
-                      currentRating: _driverRating,
-                      onRatingChanged: (val) {
-                        setState(() {
-                          _driverRating = val;
-                        });
-                      },
-                      controller: _driverCommentController,
-                      badgeText: 'D1',
-                      badgeColor: const Color(0xFF2563EB),
-                      validator: AppValidators.validateReviewComment,
-                    ),
-                    const SizedBox(height: 16),
+                      // 2. Driver Review Card
+                      if (!hasLeader && !hasFollower)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 24),
+                          child: Text(
+                            'ยังไม่มีข้อมูลคนขับสำหรับการรีวิว',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: AppTheme.textSecondary,
+                            ),
+                          ),
+                        ),
+                      if (hasLeader)
+                        _buildReviewCard(
+                          name: driverName,
+                          role: 'คนขับหลัก',
+                          avatarUrl: widget.trip.leader?.resolvedImageUrl,
+                          ratingLabel: 'ให้คะแนนคนขับหลัก',
+                          currentRating: _driverRating,
+                          onRatingChanged: (val) {
+                            setState(() {
+                              _driverRating = val;
+                            });
+                          },
+                          controller: _driverCommentController,
+                          badgeText: 'D1',
+                          badgeColor: AppTheme.accentColor,
+                          validator: AppValidators.validateReviewComment,
+                        ),
+                      if (hasLeader && hasFollower) const SizedBox(height: 16),
 
-                    // 3. Co-driver Review Card
-                    _buildReviewCard(
-                      name: coDriverName,
-                      role: 'Co-driver',
-                      avatarUrl: widget.trip.follower?.resolvedImageUrl,
-                      ratingLabel: 'Rate your co-driver',
-                      currentRating: _coDriverRating,
-                      onRatingChanged: (val) {
-                        setState(() {
-                          _coDriverRating = val;
-                        });
-                      },
-                      controller: _coDriverCommentController,
-                      badgeText: 'D2',
-                      badgeColor: const Color(0xFF475569),
-                      validator: AppValidators.validateReviewComment,
-                    ),
-                    const SizedBox(height: 16),
-                  ],
+                      // 3. Co-driver Review Card
+                      if (hasFollower)
+                        _buildReviewCard(
+                          name: coDriverName,
+                          role: 'ผู้ช่วยคนขับ',
+                          avatarUrl: widget.trip.follower?.resolvedImageUrl,
+                          ratingLabel: 'ให้คะแนนผู้ช่วยคนขับ',
+                          currentRating: _coDriverRating,
+                          onRatingChanged: (val) {
+                            setState(() {
+                              _coDriverRating = val;
+                            });
+                          },
+                          controller: _coDriverCommentController,
+                          badgeText: 'D2',
+                          badgeColor: const Color(0xFF475569),
+                          validator: AppValidators.validateReviewComment,
+                        ),
+                      const SizedBox(height: 16),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
             // Bottom Submit Button
-            if (!isReadOnly)
+            if (!isReadOnly && (hasLeader || hasFollower))
               Container(
                 padding: const EdgeInsets.all(20.0),
                 decoration: const BoxDecoration(
@@ -462,75 +543,81 @@ class _HistoryTripReviewScreenState extends ConsumerState<HistoryTripReviewScree
                     ),
                   ],
                 ),
-              child: SizedBox(
-                width: double.infinity,
-                height: 52,
-                child: ElevatedButton.icon(
-                  onPressed: () async {
-                    if (_driverRating == 0 || _coDriverRating == 0) {
-                      AppSnackBar.showWarning(
-                        context,
-                        'กรุณาเลือกคะแนนความพึงพอใจให้ครบทั้งสองท่านก่อนยืนยัน',
-                      );
-                      return;
-                    }
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: ElevatedButton.icon(
+                    onPressed: () async {
+                      if ((hasLeader && _driverRating == 0) ||
+                          (hasFollower && _coDriverRating == 0)) {
+                        AppSnackBar.showWarning(
+                          context,
+                          'กรุณาให้คะแนนคนขับก่อนส่งรีวิว',
+                        );
+                        return;
+                      }
 
-                    if (!_formKey.currentState!.validate()) {
-                      return;
-                    }
-
-                    if (!context.mounted) return;
-                    AppDialog.showLoading(context, message: 'กำลังบันทึกคะแนนรีวิว...');
-
-                    try {
-                      await ref.read(historyReviewControllerProvider.notifier).submitTripReviews(
-                        requestId: widget.trip.requestId,
-                        leaderUsername: widget.trip.leader?.username,
-                        leaderRating: _driverRating,
-                        leaderComment: _driverCommentController.text,
-                        followerUsername: widget.trip.follower?.username,
-                        followerRating: _coDriverRating,
-                        followerComment: _coDriverCommentController.text,
-                      );
+                      if (!_formKey.currentState!.validate()) {
+                        return;
+                      }
 
                       if (!context.mounted) return;
-                      AppDialog.hideLoading(context);
+                      AppDialog.showLoading(
+                        context,
+                        message: 'กำลังบันทึกคะแนนรีวิว...',
+                      );
 
-                      AppSnackBar.showSuccess(
-                        context,
-                        'ส่งรีวิวสำเร็จ ขอบคุณสำหรับความคิดเห็นของคุณ',
-                      );
-                      Navigator.of(context).pop();
-                    } catch (e) {
-                      if (!context.mounted) return;
-                      AppDialog.hideLoading(context);
-                      
-                      AppSnackBar.showError(
-                        context,
-                        'เกิดข้อผิดพลาดในการส่งรีวิว: $e',
-                      );
-                    }
-                  },
-                  icon: const Icon(Icons.send_rounded, color: Colors.white),
-                  label: const Text(
-                    'ส่งรีวิว',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
+                      try {
+                        await ref
+                            .read(historyReviewControllerProvider.notifier)
+                            .submitTripReviews(
+                              requestId: widget.trip.requestId,
+                              leaderUsername: widget.trip.leader?.username,
+                              leaderRating: _driverRating,
+                              leaderComment: _driverCommentController.text,
+                              followerUsername: widget.trip.follower?.username,
+                              followerRating: _coDriverRating,
+                              followerComment: _coDriverCommentController.text,
+                            );
+
+                        if (!context.mounted) return;
+                        AppDialog.hideLoading(context);
+
+                        AppSnackBar.showSuccess(
+                          context,
+                          'ส่งรีวิวสำเร็จ ขอบคุณสำหรับความคิดเห็นของคุณ',
+                        );
+                        Navigator.of(context).pop();
+                      } catch (e) {
+                        if (!context.mounted) return;
+                        AppDialog.hideLoading(context);
+
+                        AppSnackBar.showError(
+                          context,
+                          'เกิดข้อผิดพลาดในการส่งรีวิว: $e',
+                        );
+                      }
+                    },
+                    icon: const Icon(Icons.send_rounded, color: Colors.white),
+                    label: const Text(
+                      'ส่งรีวิว',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
                     ),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF0D47A1),
-                    disabledBackgroundColor: Colors.grey[300],
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.primaryColor,
+                      disabledBackgroundColor: Colors.grey[300],
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      elevation: 0,
                     ),
-                    elevation: 0,
                   ),
                 ),
               ),
-            ),
           ],
         ),
       ),

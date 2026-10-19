@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:safeseat_mini/core/services/geocoding_service.dart';
 import 'package:safeseat_mini/core/theme/app_theme.dart';
 import 'package:safeseat_mini/core/widgets/driver_avatar.dart';
 import 'package:safeseat_mini/data/models/driver_report_model.dart';
@@ -11,6 +12,7 @@ import 'package:safeseat_mini/features/history/controllers/history_controller.da
 import 'package:safeseat_mini/features/history/history_trip_review_screen.dart';
 import 'package:safeseat_mini/features/history/history_trip_report_screen.dart';
 import 'package:safeseat_mini/features/history/history_report_details_screen.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class HistoryTripDetailsScreen extends ConsumerStatefulWidget {
   final RequestDriverModel trip;
@@ -18,20 +20,61 @@ class HistoryTripDetailsScreen extends ConsumerStatefulWidget {
   const HistoryTripDetailsScreen({super.key, required this.trip});
 
   @override
-  ConsumerState<HistoryTripDetailsScreen> createState() => _HistoryTripDetailsScreenState();
+  ConsumerState<HistoryTripDetailsScreen> createState() =>
+      _HistoryTripDetailsScreenState();
 }
 
-class _HistoryTripDetailsScreenState extends ConsumerState<HistoryTripDetailsScreen> {
+class _HistoryTripDetailsScreenState
+    extends ConsumerState<HistoryTripDetailsScreen> {
   bool _hasReviewed = false;
   List<ReviewModel> _existingReviews = [];
   bool _hasReported = false;
   DriverReportModel? _existingReport;
+
+  String? _pickupAddress;
+  String? _dropoffAddress;
+  bool _isLoadingPickupAddress = true;
+  bool _isLoadingDropoffAddress = true;
 
   @override
   void initState() {
     super.initState();
     _checkReviewStatus();
     _checkReportStatus();
+    _loadLocationNames();
+  }
+
+  void _loadLocationNames() {
+    final trip = widget.trip;
+    _resolveAddress(trip.pickupLatitude, trip.pickupLongitude, isPickup: true);
+    _resolveAddress(
+      trip.dropoffLatitude,
+      trip.dropoffLongitude,
+      isPickup: false,
+    );
+  }
+
+  Future<void> _resolveAddress(
+    double latitude,
+    double longitude, {
+    required bool isPickup,
+  }) async {
+    String? name;
+    try {
+      name = await GeocodingService.reverseGeocode(latitude, longitude);
+    } catch (_) {
+      // Keep the place-name fallback when the lookup cannot complete.
+    }
+    if (!mounted) return;
+    setState(() {
+      if (isPickup) {
+        _pickupAddress = name;
+        _isLoadingPickupAddress = false;
+      } else {
+        _dropoffAddress = name;
+        _isLoadingDropoffAddress = false;
+      }
+    });
   }
 
   Future<void> _checkReviewStatus() async {
@@ -42,7 +85,9 @@ class _HistoryTripDetailsScreenState extends ConsumerState<HistoryTripDetailsScr
       if (mounted) {
         setState(() {
           _hasReviewed = checkResult['hasReviewed'] ?? false;
-          _existingReviews = List<ReviewModel>.from(checkResult['reviews'] ?? []);
+          _existingReviews = List<ReviewModel>.from(
+            checkResult['reviews'] ?? [],
+          );
         });
       }
     } catch (e) {
@@ -70,15 +115,28 @@ class _HistoryTripDetailsScreenState extends ConsumerState<HistoryTripDetailsScr
     var parsed = DateTime.tryParse(dateTimeStr);
     if (parsed == null) return dateTimeStr;
     parsed = parsed.toLocal();
-    final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    
+    final months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+
     // Safety check for month range
     final monthIdx = parsed.month - 1;
     final month = (monthIdx >= 0 && monthIdx < 12) ? months[monthIdx] : 'Oct';
-    
+
     final day = parsed.day.toString().padLeft(2, '0');
     final year = parsed.year;
-    
+
     // Formatting AM/PM format
     int hourInt = parsed.hour;
     final period = hourInt >= 12 ? 'PM' : 'AM';
@@ -86,7 +144,7 @@ class _HistoryTripDetailsScreenState extends ConsumerState<HistoryTripDetailsScr
     if (hourInt == 0) hourInt = 12;
     final hour = hourInt.toString().padLeft(2, '0');
     final minute = parsed.minute.toString().padLeft(2, '0');
-    
+
     return '$month $day, $year • $hour:$minute $period';
   }
 
@@ -95,28 +153,30 @@ class _HistoryTripDetailsScreenState extends ConsumerState<HistoryTripDetailsScr
     final trip = widget.trip;
     final pickupLatLng = LatLng(trip.pickupLatitude, trip.pickupLongitude);
     final dropoffLatLng = LatLng(trip.dropoffLatitude, trip.dropoffLongitude);
-    
+
     final orderCode = '#ORD${trip.requestId.toString().padLeft(4, '0')}';
     final dateStr = _formatDateTime(trip.reqDateTime);
 
     // Leader info check
-    final leaderName = trip.leader != null 
+    final leaderName = trip.leader != null
         ? '${trip.leader!.firstname} ${trip.leader!.lastname}'
         : '';
     final leaderSubtitle = trip.leader != null ? 'คนขับหลัก • ขับรถให้คุณ' : '';
-    
+
     // Follower info check
     final followerName = trip.follower != null
         ? '${trip.follower!.firstname} ${trip.follower!.lastname}'
         : '';
     final followerSubtitle = trip.follower != null
         ? (trip.follower!.vehicleSummary != 'ไม่ระบุยานพาหนะ'
-            ? 'ขับตาม: ${trip.follower!.vehicleSummary}'
-            : 'คนขับผู้ช่วย (ขับตาม)')
+              ? 'ขับตาม: ${trip.follower!.vehicleSummary}'
+              : 'คนขับผู้ช่วย (ขับตาม)')
         : '';
 
-    final bool hasDrivers = trip.leader != null && trip.requestStatus != 'ยกเลิก';
-    final int driverCount = (trip.leader != null ? 1 : 0) + (trip.follower != null ? 1 : 0);
+    final bool hasDrivers =
+        trip.leader != null && trip.requestStatus != 'ยกเลิก';
+    final int driverCount =
+        (trip.leader != null ? 1 : 0) + (trip.follower != null ? 1 : 0);
 
     // Car details check
     final hasUserCar = trip.userCar != null;
@@ -133,29 +193,31 @@ class _HistoryTripDetailsScreenState extends ConsumerState<HistoryTripDetailsScr
         ? 'สี $carColor'
         : (hasUserCar ? 'รถยนต์ส่วนบุคคล' : 'ไม่มีข้อมูลรายละเอียดรถ');
 
-    final pickupPoint = trip.note != null && trip.note!.isNotEmpty
-        ? trip.note!
-        : 'จุดรับ (${trip.pickupLatitude.toStringAsFixed(4)}, ${trip.pickupLongitude.toStringAsFixed(4)})';
-    final dropoffPoint = 'จุดส่ง (${trip.dropoffLatitude.toStringAsFixed(4)}, ${trip.dropoffLongitude.toStringAsFixed(4)})';
+    final pickupPoint = _isLoadingPickupAddress
+        ? 'กำลังค้นหาชื่อสถานที่...'
+        : (_pickupAddress ?? 'ไม่พบชื่อสถานที่');
+    final dropoffPoint = _isLoadingDropoffAddress
+        ? 'กำลังค้นหาชื่อสถานที่...'
+        : (_dropoffAddress ?? 'ไม่พบชื่อสถานที่');
 
     final paymentMethodText = trip.paymentMethod == 2
-        ? 'ชำระด้วย SafeSeat Wallet'
-        : 'ชำระด้วย เงินสด';
+        ? 'กระเป๋าเงิน SafeSeat'
+        : 'ชำระด้วยเงินสด';
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
         scrolledUnderElevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Color(0xFF0F172A)),
+          icon: const Icon(Icons.arrow_back, color: AppTheme.textPrimary),
           onPressed: () => Navigator.of(context).pop(),
         ),
         title: const Text(
           'รายละเอียดบริการ',
           style: TextStyle(
-            color: Color(0xFF0F172A),
+            color: AppTheme.textPrimary,
             fontSize: 18,
             fontWeight: FontWeight.bold,
           ),
@@ -169,16 +231,19 @@ class _HistoryTripDetailsScreenState extends ConsumerState<HistoryTripDetailsScr
             children: [
               // 1. Order details header
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20.0,
+                  vertical: 16.0,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Order $orderCode',
+                      'การเดินทาง $orderCode',
                       style: const TextStyle(
                         fontSize: 22,
                         fontWeight: FontWeight.bold,
-                        color: Color(0xFF0F172A),
+                        color: AppTheme.textPrimary,
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -186,7 +251,34 @@ class _HistoryTripDetailsScreenState extends ConsumerState<HistoryTripDetailsScr
                       dateStr,
                       style: const TextStyle(
                         fontSize: 14,
-                        color: Color(0xFF64748B),
+                        color: AppTheme.textSecondary,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: trip.requestStatus == 'เสร็จสิ้น'
+                            ? AppTheme.successColor.withValues(alpha: 0.1)
+                            : trip.requestStatus == 'ยกเลิก'
+                            ? AppTheme.errorColor.withValues(alpha: 0.1)
+                            : AppTheme.primaryColor.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        trip.requestStatus,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: trip.requestStatus == 'เสร็จสิ้น'
+                              ? AppTheme.successColor
+                              : trip.requestStatus == 'ยกเลิก'
+                              ? AppTheme.errorColor
+                              : AppTheme.primaryColor,
+                        ),
                       ),
                     ),
                   ],
@@ -195,7 +287,7 @@ class _HistoryTripDetailsScreenState extends ConsumerState<HistoryTripDetailsScr
 
               // 2. Map Preview Area with overlapping location info card
               Container(
-                height: 280,
+                height: 320,
                 margin: const EdgeInsets.symmetric(horizontal: 20.0),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(24),
@@ -221,7 +313,8 @@ class _HistoryTripDetailsScreenState extends ConsumerState<HistoryTripDetailsScr
                         ),
                         children: [
                           TileLayer(
-                            urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                            urlTemplate:
+                                'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                             userAgentPackageName: 'com.safeseat.mini',
                           ),
                           PolylineLayer(
@@ -241,7 +334,7 @@ class _HistoryTripDetailsScreenState extends ConsumerState<HistoryTripDetailsScr
                                 height: 40,
                                 child: const Icon(
                                   Icons.location_on,
-                                  color: Colors.blue,
+                                  color: AppTheme.pickupColor,
                                   size: 32,
                                 ),
                               ),
@@ -251,7 +344,7 @@ class _HistoryTripDetailsScreenState extends ConsumerState<HistoryTripDetailsScr
                                 height: 40,
                                 child: const Icon(
                                   Icons.flag,
-                                  color: Colors.red,
+                                  color: AppTheme.dropoffColor,
                                   size: 32,
                                 ),
                               ),
@@ -282,13 +375,21 @@ class _HistoryTripDetailsScreenState extends ConsumerState<HistoryTripDetailsScr
                               // Timeline indicators
                               Column(
                                 children: [
-                                  const Icon(Icons.location_on, color: Colors.blue, size: 20),
+                                  const Icon(
+                                    Icons.location_on,
+                                    color: AppTheme.pickupColor,
+                                    size: 20,
+                                  ),
                                   Container(
                                     width: 1.5,
                                     height: 20,
                                     color: Colors.grey[300],
                                   ),
-                                  const Icon(Icons.flag, color: Colors.red, size: 20),
+                                  const Icon(
+                                    Icons.flag,
+                                    color: AppTheme.dropoffColor,
+                                    size: 20,
+                                  ),
                                 ],
                               ),
                               const SizedBox(width: 8),
@@ -298,38 +399,48 @@ class _HistoryTripDetailsScreenState extends ConsumerState<HistoryTripDetailsScr
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     const Text(
-                                      'PICKUP POINT',
+                                      'จุดรับ',
                                       style: TextStyle(
-                                        fontSize: 9,
+                                        fontSize: 12,
                                         fontWeight: FontWeight.bold,
-                                        color: Color(0xFF94A3B8),
+                                        color: AppTheme.textMuted,
                                       ),
                                     ),
                                     Text(
                                       pickupPoint,
-                                      style: const TextStyle(
-                                        fontSize: 12,
+                                      style: TextStyle(
+                                        fontSize: 14,
                                         fontWeight: FontWeight.w600,
-                                        color: Color(0xFF1E293B),
+                                        color: _isLoadingPickupAddress
+                                            ? AppTheme.textMuted
+                                            : AppTheme.textPrimary,
+                                        fontStyle: _isLoadingPickupAddress
+                                            ? FontStyle.italic
+                                            : FontStyle.normal,
                                       ),
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                     ),
                                     const SizedBox(height: 8),
                                     const Text(
-                                      'DROP-OFF POINT',
+                                      'จุดส่ง',
                                       style: TextStyle(
-                                        fontSize: 9,
+                                        fontSize: 12,
                                         fontWeight: FontWeight.bold,
-                                        color: Color(0xFF94A3B8),
+                                        color: AppTheme.textMuted,
                                       ),
                                     ),
                                     Text(
                                       dropoffPoint,
-                                      style: const TextStyle(
-                                        fontSize: 12,
+                                      style: TextStyle(
+                                        fontSize: 14,
                                         fontWeight: FontWeight.w600,
-                                        color: Color(0xFF1E293B),
+                                        color: _isLoadingDropoffAddress
+                                            ? AppTheme.textMuted
+                                            : AppTheme.textPrimary,
+                                        fontStyle: _isLoadingDropoffAddress
+                                            ? FontStyle.italic
+                                            : FontStyle.normal,
                                       ),
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
@@ -344,16 +455,16 @@ class _HistoryTripDetailsScreenState extends ConsumerState<HistoryTripDetailsScr
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
                                   const Text(
-                                    'DISTANCE',
+                                    'ระยะทาง',
                                     style: TextStyle(
-                                      fontSize: 9,
+                                      fontSize: 12,
                                       fontWeight: FontWeight.bold,
-                                      color: Color(0xFF94A3B8),
+                                      color: AppTheme.textMuted,
                                     ),
                                   ),
                                   const SizedBox(height: 2),
                                   Text(
-                                    '${trip.reqDistance.toStringAsFixed(1)} KM',
+                                    '${trip.reqDistance.toStringAsFixed(1)} กม.',
                                     style: const TextStyle(
                                       fontSize: 15,
                                       fontWeight: FontWeight.bold,
@@ -371,9 +482,75 @@ class _HistoryTripDetailsScreenState extends ConsumerState<HistoryTripDetailsScr
                 ),
               ),
 
+              Align(
+                alignment: Alignment.centerRight,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 6, 20, 0),
+                  child: InkWell(
+                    onTap: () => launchUrl(
+                      Uri.parse('https://www.openstreetmap.org/copyright'),
+                      mode: LaunchMode.externalApplication,
+                    ),
+                    child: const Text(
+                      'ข้อมูลสถานที่และแผนที่ © OpenStreetMap contributors',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: AppTheme.textSecondary,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+
+              // User remark / note if present
+              if (trip.note != null && trip.note!.trim().isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(
+                    left: 20.0,
+                    right: 20.0,
+                    top: 12.0,
+                  ),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: AppTheme.borderColor),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.sticky_note_2_outlined,
+                          size: 18,
+                          color: AppTheme.textSecondary,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'หมายเหตุ: ${trip.note!.trim()}',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFF475569),
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
               // 3. Driver Info Section
               Padding(
-                padding: const EdgeInsets.only(left: 20.0, right: 20.0, top: 24.0, bottom: 12.0),
+                padding: const EdgeInsets.only(
+                  left: 20.0,
+                  right: 20.0,
+                  top: 24.0,
+                  bottom: 12.0,
+                ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -382,21 +559,24 @@ class _HistoryTripDetailsScreenState extends ConsumerState<HistoryTripDetailsScr
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
-                        color: Color(0xFF0F172A),
+                        color: AppTheme.textPrimary,
                       ),
                     ),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
                         color: const Color(0xFFEFF6FF),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Text(
-                        hasDrivers ? '$driverCount Driver${driverCount > 1 ? 's' : ''}' : '0 Drivers',
+                        hasDrivers ? '$driverCount คน' : 'ยังไม่มีคนขับ',
                         style: const TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.bold,
-                          color: Color(0xFF2563EB),
+                          color: AppTheme.accentColor,
                         ),
                       ),
                     ),
@@ -417,7 +597,9 @@ class _HistoryTripDetailsScreenState extends ConsumerState<HistoryTripDetailsScr
                               decoration: BoxDecoration(
                                 color: Colors.white,
                                 borderRadius: BorderRadius.circular(20),
-                                border: Border.all(color: const Color(0xFFF1F5F9)),
+                                border: Border.all(
+                                  color: const Color(0xFFF1F5F9),
+                                ),
                                 boxShadow: [
                                   BoxShadow(
                                     color: Colors.black.withValues(alpha: 0.02),
@@ -433,7 +615,7 @@ class _HistoryTripDetailsScreenState extends ConsumerState<HistoryTripDetailsScr
                                     fallbackName: leaderName,
                                     radius: 36,
                                     badgeText: 'D1',
-                                    badgeColor: const Color(0xFF2563EB),
+                                    badgeColor: AppTheme.accentColor,
                                   ),
                                   const SizedBox(height: 12),
                                   Text(
@@ -441,7 +623,7 @@ class _HistoryTripDetailsScreenState extends ConsumerState<HistoryTripDetailsScr
                                     style: const TextStyle(
                                       fontSize: 14,
                                       fontWeight: FontWeight.bold,
-                                      color: Color(0xFF0F172A),
+                                      color: AppTheme.textPrimary,
                                     ),
                                     textAlign: TextAlign.center,
                                     maxLines: 1,
@@ -452,32 +634,43 @@ class _HistoryTripDetailsScreenState extends ConsumerState<HistoryTripDetailsScr
                                     leaderSubtitle,
                                     style: const TextStyle(
                                       fontSize: 11,
-                                      color: Color(0xFF94A3B8),
+                                      color: AppTheme.textMuted,
                                     ),
                                   ),
                                   const SizedBox(height: 8),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                    decoration: BoxDecoration(
-                                      border: Border.all(color: const Color(0xFFE2E8F0)),
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        const Icon(Icons.star_rounded, color: Colors.amber, size: 16),
-                                        const SizedBox(width: 4),
-                                        Text(
-                                          trip.leader?.rating != null ? trip.leader!.rating!.toStringAsFixed(1) : '5.0',
-                                          style: const TextStyle(
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.bold,
-                                            color: Color(0xFF475569),
-                                          ),
+                                  if (trip.leader?.rating != null)
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 3,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        border: Border.all(
+                                          color: AppTheme.borderColor,
                                         ),
-                                      ],
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Icon(
+                                            Icons.star_rounded,
+                                            color: Colors.amber,
+                                            size: 16,
+                                          ),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            trip.leader!.rating!
+                                                .toStringAsFixed(1),
+                                            style: const TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.bold,
+                                              color: Color(0xFF475569),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
                                     ),
-                                  ),
                                 ],
                               ),
                             ),
@@ -491,10 +684,14 @@ class _HistoryTripDetailsScreenState extends ConsumerState<HistoryTripDetailsScr
                                     decoration: BoxDecoration(
                                       color: Colors.white,
                                       borderRadius: BorderRadius.circular(20),
-                                      border: Border.all(color: const Color(0xFFF1F5F9)),
+                                      border: Border.all(
+                                        color: const Color(0xFFF1F5F9),
+                                      ),
                                       boxShadow: [
                                         BoxShadow(
-                                          color: Colors.black.withValues(alpha: 0.02),
+                                          color: Colors.black.withValues(
+                                            alpha: 0.02,
+                                          ),
                                           blurRadius: 10,
                                           offset: const Offset(0, 4),
                                         ),
@@ -503,7 +700,8 @@ class _HistoryTripDetailsScreenState extends ConsumerState<HistoryTripDetailsScr
                                     child: Column(
                                       children: [
                                         DriverAvatar(
-                                          imageUrl: trip.follower?.resolvedImageUrl,
+                                          imageUrl:
+                                              trip.follower?.resolvedImageUrl,
                                           fallbackName: followerName,
                                           radius: 36,
                                           badgeText: 'D2',
@@ -516,7 +714,7 @@ class _HistoryTripDetailsScreenState extends ConsumerState<HistoryTripDetailsScr
                                           style: const TextStyle(
                                             fontSize: 14,
                                             fontWeight: FontWeight.bold,
-                                            color: Color(0xFF0F172A),
+                                            color: AppTheme.textPrimary,
                                           ),
                                           textAlign: TextAlign.center,
                                           maxLines: 1,
@@ -527,45 +725,60 @@ class _HistoryTripDetailsScreenState extends ConsumerState<HistoryTripDetailsScr
                                           followerSubtitle,
                                           style: const TextStyle(
                                             fontSize: 11,
-                                            color: Color(0xFF94A3B8),
+                                            color: AppTheme.textMuted,
                                           ),
                                         ),
                                         const SizedBox(height: 8),
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                          decoration: BoxDecoration(
-                                            border: Border.all(color: const Color(0xFFE2E8F0)),
-                                            borderRadius: BorderRadius.circular(12),
-                                          ),
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              const Icon(Icons.star_rounded, color: Colors.amber, size: 16),
-                                              const SizedBox(width: 4),
-                                              Text(
-                                                trip.follower?.rating != null ? trip.follower!.rating!.toStringAsFixed(1) : '5.0',
-                                                style: const TextStyle(
-                                                  fontSize: 11,
-                                                  fontWeight: FontWeight.bold,
-                                                  color: Color(0xFF475569),
-                                                ),
+                                        if (trip.follower?.rating != null)
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 8,
+                                              vertical: 3,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              border: Border.all(
+                                                color: AppTheme.borderColor,
                                               ),
-                                            ],
+                                              borderRadius:
+                                                  BorderRadius.circular(12),
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                const Icon(
+                                                  Icons.star_rounded,
+                                                  color: Colors.amber,
+                                                  size: 16,
+                                                ),
+                                                const SizedBox(width: 4),
+                                                Text(
+                                                  trip.follower!.rating!
+                                                      .toStringAsFixed(1),
+                                                  style: const TextStyle(
+                                                    fontSize: 11,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: Color(0xFF475569),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
                                           ),
-                                        ),
                                       ],
                                     ),
                                   )
                                 : Container(
                                     padding: const EdgeInsets.all(16.0),
                                     decoration: BoxDecoration(
-                                      color: const Color(0xFFF8FAFC),
+                                      color: AppTheme.backgroundColor,
                                       borderRadius: BorderRadius.circular(20),
-                                      border: Border.all(color: const Color(0xFFF1F5F9)),
+                                      border: Border.all(
+                                        color: const Color(0xFFF1F5F9),
+                                      ),
                                     ),
                                     child: Center(
                                       child: Column(
-                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
                                         children: [
                                           Icon(
                                             Icons.person_outline_rounded,
@@ -574,7 +787,7 @@ class _HistoryTripDetailsScreenState extends ConsumerState<HistoryTripDetailsScr
                                           ),
                                           const SizedBox(height: 8),
                                           Text(
-                                            'ไม่มีผู้ช่วยคนขับ (Follower)',
+                                            'ไม่มีผู้ช่วยคนขับ',
                                             style: TextStyle(
                                               fontSize: 11,
                                               color: Colors.grey[500],
@@ -590,7 +803,10 @@ class _HistoryTripDetailsScreenState extends ConsumerState<HistoryTripDetailsScr
                       )
                     : Container(
                         width: double.infinity,
-                        padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 16),
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 32,
+                          horizontal: 16,
+                        ),
                         decoration: BoxDecoration(
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(20),
@@ -617,7 +833,7 @@ class _HistoryTripDetailsScreenState extends ConsumerState<HistoryTripDetailsScr
                               style: TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.bold,
-                                color: Color(0xFF64748B),
+                                color: AppTheme.textSecondary,
                               ),
                             ),
                             const SizedBox(height: 4),
@@ -627,7 +843,7 @@ class _HistoryTripDetailsScreenState extends ConsumerState<HistoryTripDetailsScr
                                   : 'ยังไม่มีคนขับกดรับงานนี้',
                               style: const TextStyle(
                                 fontSize: 12,
-                                color: Color(0xFF94A3B8),
+                                color: AppTheme.textMuted,
                               ),
                               textAlign: TextAlign.center,
                             ),
@@ -638,13 +854,18 @@ class _HistoryTripDetailsScreenState extends ConsumerState<HistoryTripDetailsScr
 
               // 4. Vehicle Details Section
               Padding(
-                padding: const EdgeInsets.only(left: 20.0, right: 20.0, top: 24.0, bottom: 12.0),
+                padding: const EdgeInsets.only(
+                  left: 20.0,
+                  right: 20.0,
+                  top: 24.0,
+                  bottom: 12.0,
+                ),
                 child: const Text(
                   'ข้อมูลยานพาหนะของคุณ',
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFF0F172A),
+                    color: AppTheme.textPrimary,
                   ),
                 ),
               ),
@@ -692,7 +913,7 @@ class _HistoryTripDetailsScreenState extends ConsumerState<HistoryTripDetailsScr
                                     style: const TextStyle(
                                       fontSize: 16,
                                       fontWeight: FontWeight.bold,
-                                      color: Color(0xFF0F172A),
+                                      color: AppTheme.textPrimary,
                                     ),
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
@@ -701,7 +922,10 @@ class _HistoryTripDetailsScreenState extends ConsumerState<HistoryTripDetailsScr
                                 if (carPlate.isNotEmpty) ...[
                                   const SizedBox(width: 8),
                                   Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 3,
+                                    ),
                                     decoration: BoxDecoration(
                                       color: const Color(0xFFF1F5F9),
                                       borderRadius: BorderRadius.circular(6),
@@ -723,7 +947,7 @@ class _HistoryTripDetailsScreenState extends ConsumerState<HistoryTripDetailsScr
                               carSubtitle,
                               style: const TextStyle(
                                 fontSize: 13,
-                                color: Color(0xFF94A3B8),
+                                color: AppTheme.textMuted,
                               ),
                             ),
                           ],
@@ -736,13 +960,18 @@ class _HistoryTripDetailsScreenState extends ConsumerState<HistoryTripDetailsScr
 
               // 5. Payment details card
               Padding(
-                padding: const EdgeInsets.only(left: 20.0, right: 20.0, top: 24.0, bottom: 12.0),
+                padding: const EdgeInsets.only(
+                  left: 20.0,
+                  right: 20.0,
+                  top: 24.0,
+                  bottom: 12.0,
+                ),
                 child: const Text(
                   'รายละเอียดค่าบริการ',
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFF0F172A),
+                    color: AppTheme.textPrimary,
                   ),
                 ),
               ),
@@ -770,7 +999,7 @@ class _HistoryTripDetailsScreenState extends ConsumerState<HistoryTripDetailsScr
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             const Text(
-                              'ค่าบริการรวม (Service Fee)',
+                              'ค่าบริการรวม',
                               style: TextStyle(
                                 fontSize: 15,
                                 fontWeight: FontWeight.bold,
@@ -782,16 +1011,19 @@ class _HistoryTripDetailsScreenState extends ConsumerState<HistoryTripDetailsScr
                               style: const TextStyle(
                                 fontSize: 22,
                                 fontWeight: FontWeight.bold,
-                                color: Color(0xFF0D47A1),
+                                color: AppTheme.primaryColor,
                               ),
                             ),
                           ],
                         ),
                       ),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16.0,
+                          vertical: 12.0,
+                        ),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFF8FAFC),
+                          color: AppTheme.backgroundColor,
                           borderRadius: const BorderRadius.only(
                             bottomLeft: Radius.circular(20),
                             bottomRight: Radius.circular(20),
@@ -804,7 +1036,7 @@ class _HistoryTripDetailsScreenState extends ConsumerState<HistoryTripDetailsScr
                           children: [
                             const Icon(
                               Icons.account_balance_wallet_rounded,
-                              color: Color(0xFF0D47A1),
+                              color: AppTheme.primaryColor,
                               size: 20,
                             ),
                             const SizedBox(width: 8),
@@ -820,7 +1052,7 @@ class _HistoryTripDetailsScreenState extends ConsumerState<HistoryTripDetailsScr
                             ),
                             const Icon(
                               Icons.verified,
-                              color: Color(0xFF2563EB),
+                              color: AppTheme.accentColor,
                               size: 16,
                             ),
                           ],
@@ -834,7 +1066,10 @@ class _HistoryTripDetailsScreenState extends ConsumerState<HistoryTripDetailsScr
               // 6. Action buttons (only show if not cancelled)
               if (trip.requestStatus != 'ยกเลิก')
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 24.0),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20.0,
+                    vertical: 24.0,
+                  ),
                   child: Column(
                     children: [
                       SizedBox(
@@ -846,14 +1081,20 @@ class _HistoryTripDetailsScreenState extends ConsumerState<HistoryTripDetailsScr
                               MaterialPageRoute(
                                 builder: (context) => HistoryTripReviewScreen(
                                   trip: trip,
-                                  existingReviews: _hasReviewed ? _existingReviews : null,
+                                  existingReviews: _hasReviewed
+                                      ? _existingReviews
+                                      : null,
+                                  pickupAddress: _pickupAddress,
+                                  dropoffAddress: _dropoffAddress,
                                 ),
                               ),
                             );
                             _checkReviewStatus();
                           },
                           icon: Icon(
-                            _hasReviewed ? Icons.rate_review_rounded : Icons.star_rounded,
+                            _hasReviewed
+                                ? Icons.rate_review_rounded
+                                : Icons.star_rounded,
                             color: Colors.white,
                           ),
                           label: Text(
@@ -865,7 +1106,9 @@ class _HistoryTripDetailsScreenState extends ConsumerState<HistoryTripDetailsScr
                             ),
                           ),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: _hasReviewed ? const Color(0xFF475569) : const Color(0xFF0D47A1),
+                            backgroundColor: _hasReviewed
+                                ? const Color(0xFF475569)
+                                : AppTheme.primaryColor,
                             elevation: 0,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(16),
@@ -882,34 +1125,53 @@ class _HistoryTripDetailsScreenState extends ConsumerState<HistoryTripDetailsScr
                             if (_hasReported && _existingReport != null) {
                               await Navigator.of(context).push(
                                 MaterialPageRoute(
-                                  builder: (context) => HistoryReportDetailsScreen(report: _existingReport!),
+                                  builder: (context) =>
+                                      HistoryReportDetailsScreen(
+                                        report: _existingReport!,
+                                      ),
                                 ),
                               );
                             } else {
                               await Navigator.of(context).push(
                                 MaterialPageRoute(
-                                  builder: (context) => HistoryTripReportScreen(trip: trip),
+                                  builder: (context) => HistoryTripReportScreen(
+                                    trip: trip,
+                                    pickupAddress: _pickupAddress,
+                                    dropoffAddress: _dropoffAddress,
+                                  ),
                                 ),
                               );
                             }
                             _checkReportStatus();
                           },
                           icon: Icon(
-                            _hasReported ? Icons.assignment_turned_in_rounded : Icons.error_outline_rounded,
-                            color: _hasReported ? const Color(0xFF0D47A1) : const Color(0xFF64748B),
+                            _hasReported
+                                ? Icons.assignment_turned_in_rounded
+                                : Icons.error_outline_rounded,
+                            color: _hasReported
+                                ? AppTheme.primaryColor
+                                : AppTheme.textSecondary,
                           ),
                           label: Text(
-                            _hasReported ? 'ดูรายงานที่คุณแจ้งไว้' : 'รายงานคนขับ',
+                            _hasReported
+                                ? 'ดูรายงานที่คุณแจ้งไว้'
+                                : 'รายงานคนขับ',
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
-                              color: _hasReported ? const Color(0xFF0D47A1) : const Color(0xFF64748B),
+                              color: _hasReported
+                                  ? AppTheme.primaryColor
+                                  : AppTheme.textSecondary,
                             ),
                           ),
                           style: OutlinedButton.styleFrom(
-                            backgroundColor: _hasReported ? const Color(0xFFEFF6FF) : const Color(0xFFF8FAFC),
+                            backgroundColor: _hasReported
+                                ? const Color(0xFFEFF6FF)
+                                : AppTheme.backgroundColor,
                             side: BorderSide(
-                              color: _hasReported ? const Color(0xFF93C5FD) : const Color(0xFFE2E8F0),
+                              color: _hasReported
+                                  ? const Color(0xFF93C5FD)
+                                  : AppTheme.borderColor,
                               width: _hasReported ? 1.5 : 1.0,
                             ),
                             shape: RoundedRectangleBorder(
