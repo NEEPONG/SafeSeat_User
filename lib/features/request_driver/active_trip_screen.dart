@@ -11,8 +11,10 @@ import 'package:safeseat_mini/features/request_driver/controllers/request_driver
 import 'package:safeseat_mini/features/profile/controllers/profile_controller.dart';
 import 'package:safeseat_mini/core/controllers/user_controller.dart';
 import 'package:safeseat_mini/core/services/route_service.dart';
+import 'package:safeseat_mini/core/services/geocoding_service.dart';
 import 'package:safeseat_mini/data/models/request_driver_model.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class ActiveTripScreen extends ConsumerStatefulWidget {
   final int requestId;
@@ -56,6 +58,10 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
   // initialized from the constructor values and refreshed on every poll.
   late LatLng _pickupLatLng;
   late LatLng _dropoffLatLng;
+  late String _pickupAddress;
+  late String _dropoffAddress;
+  LatLng? _pickupLookupPoint;
+  LatLng? _dropoffLookupPoint;
 
   String _currentStatus = 'กำลังค้นหาคนขับ';
   DriverProfileModel? _leaderDriver;
@@ -67,16 +73,47 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
     super.initState();
     _pickupLatLng = widget.pickupLatLng;
     _dropoffLatLng = widget.dropoffLatLng;
+    _pickupAddress = widget.pickupAddress;
+    _dropoffAddress = widget.dropoffAddress;
     _tripPrice = widget.price;
-    
+
     // Populate from initial data if available
     if (widget.initialRequestData != null) {
       _parseRequestData(widget.initialRequestData!);
     }
+    if (_needsPlaceLookup(_pickupAddress)) _startPlaceLookup(pickup: true);
+    if (_needsPlaceLookup(_dropoffAddress)) _startPlaceLookup(pickup: false);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadRoute();
       _startStatusPolling();
+    });
+  }
+
+  bool _needsPlaceLookup(String value) =>
+      value == 'กำลังค้นหาสถานที่...' || value == 'ไม่พบชื่อสถานที่';
+
+  void _startPlaceLookup({required bool pickup}) {
+    final point = pickup ? _pickupLatLng : _dropoffLatLng;
+    if (pickup) {
+      if (_pickupLookupPoint == point) return;
+      _pickupLookupPoint = point;
+    } else {
+      if (_dropoffLookupPoint == point) return;
+      _dropoffLookupPoint = point;
+    }
+    _resolvePlace(point, pickup: pickup);
+  }
+
+  Future<void> _resolvePlace(LatLng point, {required bool pickup}) async {
+    final name = await GeocodingService.reverseGeocodeLatLng(point);
+    if (!mounted || (pickup ? _pickupLatLng : _dropoffLatLng) != point) return;
+    setState(() {
+      if (pickup) {
+        _pickupAddress = name ?? 'ไม่พบชื่อสถานที่';
+      } else {
+        _dropoffAddress = name ?? 'ไม่พบชื่อสถานที่';
+      }
     });
   }
 
@@ -103,6 +140,8 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
   void _parseRequestData(RequestDriverModel data) {
     bool locationChanged = false;
     bool endpointsChanged = false;
+    bool pickupChanged = false;
+    bool dropoffChanged = false;
     final String normalizedStatus = _normalizeStatus(data.requestStatus);
     final bool statusChanged = normalizedStatus != _currentStatus;
 
@@ -118,6 +157,8 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
         final newPickup = LatLng(data.pickupLatitude, data.pickupLongitude);
         if (newPickup != _pickupLatLng) {
           _pickupLatLng = newPickup;
+          _pickupAddress = 'กำลังค้นหาสถานที่...';
+          pickupChanged = true;
           endpointsChanged = true;
         }
       }
@@ -125,21 +166,24 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
         final newDropoff = LatLng(data.dropoffLatitude, data.dropoffLongitude);
         if (newDropoff != _dropoffLatLng) {
           _dropoffLatLng = newDropoff;
+          _dropoffAddress = 'กำลังค้นหาสถานที่...';
+          dropoffChanged = true;
           endpointsChanged = true;
         }
       }
- 
+
       // Check if buddyteam coordinates exist
       final buddyteam = data.buddyTeam;
       if (buddyteam != null) {
         final double? lat = buddyteam.currentLocLat;
         final double? lng = buddyteam.currentLocLng;
-        
+
         if (lat != null && lng != null && lat != 0.0 && lng != 0.0) {
           final newDriverPos = LatLng(lat, lng);
           // Only count as "moved" when the change is meaningful (GPS jitter
           // tolerance) so the route isn't recomputed every poll.
-          final bool driverMoved = _driverLatLng == null ||
+          final bool driverMoved =
+              _driverLatLng == null ||
               (lat - _driverLatLng!.latitude).abs() > _locationTolerance ||
               (lng - _driverLatLng!.longitude).abs() > _locationTolerance;
           if (driverMoved) {
@@ -150,12 +194,17 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
       }
     });
 
+    if (pickupChanged) _startPlaceLookup(pickup: true);
+    if (dropoffChanged) _startPlaceLookup(pickup: false);
+
     // Reload the route whenever the driver moves, the trip status changes,
     // or the server endpoints get corrected. Only re-fit the camera when the
     // trip layout itself changes (first load, status/direction, endpoints);
     // live driver movement should update the polyline without jumping the map.
     if (locationChanged || statusChanged || endpointsChanged) {
-      _loadRoute(shouldFit: statusChanged || endpointsChanged || !_hasFittedCamera);
+      _loadRoute(
+        shouldFit: statusChanged || endpointsChanged || !_hasFittedCamera,
+      );
     }
 
     // If trip completed, stop polling and refresh wallet
@@ -177,12 +226,10 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
         _currentStatus == 'รอคนขับ';
 
     final bool isArrivedAtPickup =
-        _currentStatus == 'ถึงจุดนัดหมาย' ||
-        _currentStatus == 'ถึงจุดรับแล้ว';
+        _currentStatus == 'ถึงจุดนัดหมาย' || _currentStatus == 'ถึงจุดรับแล้ว';
 
     final bool isCompleted =
-        _currentStatus == 'เสร็จสิ้น' ||
-        _currentStatus == 'completed';
+        _currentStatus == 'เสร็จสิ้น' || _currentStatus == 'completed';
 
     // 2. Determine start and target endpoints for current phase:
     // - Heading to Pickup: Driver -> Pickup (เส้นทางเดียวก่อน เพื่อไม่ให้ซูมไกลเกินไป)
@@ -190,7 +237,7 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
     // - In Transit (Driving to Destination): Driver Live Pos -> Destination
     // - Completed: Pickup -> Destination
     final startLatLng = _driverLatLng ?? _pickupLatLng;
-    
+
     LatLng routeOrigin;
     LatLng routeDestination;
 
@@ -212,7 +259,10 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
       // Only request route if origin and destination are distinct
       if (routeOrigin.latitude != routeDestination.latitude ||
           routeOrigin.longitude != routeDestination.longitude) {
-        final routeDetails = await RouteService.getRouteDetails(routeOrigin, routeDestination);
+        final routeDetails = await RouteService.getRouteDetails(
+          routeOrigin,
+          routeDestination,
+        );
         points.addAll(routeDetails?.points ?? [routeOrigin, routeDestination]);
       } else {
         points.add(routeOrigin);
@@ -246,8 +296,7 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
         _currentStatus == 'รอคนขับ';
 
     final bool isArrivedAtPickup =
-        _currentStatus == 'ถึงจุดนัดหมาย' ||
-        _currentStatus == 'ถึงจุดรับแล้ว';
+        _currentStatus == 'ถึงจุดนัดหมาย' || _currentStatus == 'ถึงจุดรับแล้ว';
 
     final pointsToFit = <LatLng>[];
 
@@ -274,7 +323,8 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
     if (pointsToFit.isEmpty) return;
 
     // If single point or both points are identical, smoothly center the camera
-    if (pointsToFit.length == 1 || (pointsToFit.length == 2 && pointsToFit[0] == pointsToFit[1])) {
+    if (pointsToFit.length == 1 ||
+        (pointsToFit.length == 2 && pointsToFit[0] == pointsToFit[1])) {
       _mapController.move(pointsToFit.first, 15.5);
       return;
     }
@@ -320,8 +370,11 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
   }
 
   void _showCallDialog(String role, String name, String? phoneNo) {
-    if (phoneNo == null || phoneNo.isEmpty) {
-      AppSnackBar.showWarning(context, 'ไม่มีข้อมูลเบอร์โทรศัพท์สำหรับคนขับคนนี้');
+    if (phoneNo == null || phoneNo.trim().isEmpty) {
+      AppSnackBar.showWarning(
+        context,
+        'ไม่มีข้อมูลเบอร์โทรศัพท์สำหรับคนขับคนนี้',
+      );
       return;
     }
 
@@ -330,9 +383,7 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
       builder: (dialogContext) => AlertDialog(
         backgroundColor: Colors.white,
         surfaceTintColor: Colors.transparent,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(24),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         title: Row(
           children: [
             Container(
@@ -358,9 +409,19 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('คนขับ: $name', style: const TextStyle(fontSize: 15, color: Color(0xFF334155))),
+            Text(
+              'คนขับ: $name',
+              style: const TextStyle(fontSize: 15, color: Color(0xFF334155)),
+            ),
             const SizedBox(height: 6),
-            Text('เบอร์โทรศัพท์: $phoneNo', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.primaryColor)),
+            Text(
+              'เบอร์โทรศัพท์: $phoneNo',
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: AppTheme.primaryColor,
+              ),
+            ),
           ],
         ),
         actions: [
@@ -370,7 +431,10 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
                 child: OutlinedButton.icon(
                   onPressed: () {
                     Clipboard.setData(ClipboardData(text: phoneNo));
-                    AppSnackBar.showSuccess(context, 'คัดลอกเบอร์โทรศัพท์เรียบร้อยแล้ว');
+                    AppSnackBar.showSuccess(
+                      context,
+                      'คัดลอกเบอร์โทรศัพท์เรียบร้อยแล้ว',
+                    );
                     Navigator.of(dialogContext).pop();
                   },
                   icon: const Icon(Icons.copy_rounded, size: 16),
@@ -390,7 +454,7 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
                 child: ElevatedButton.icon(
                   onPressed: () {
                     Navigator.of(dialogContext).pop();
-                    AppSnackBar.showInfo(context, 'กำลังจำลองสายโทรไปที่ $phoneNo...');
+                    _openPhoneDialer(phoneNo);
                   },
                   icon: const Icon(Icons.phone_rounded, size: 16),
                   label: const Text('โทรออก'),
@@ -412,50 +476,63 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
     );
   }
 
-  void _shareTripLink() {
-    final String leaderName = _leaderDriver != null && _leaderDriver!.fullName.isNotEmpty
+  Future<void> _openPhoneDialer(String phoneNo) async {
+    try {
+      final uri = Uri(scheme: 'tel', path: phoneNo.trim());
+      final launched = await launchUrl(
+        uri,
+        mode: LaunchMode.externalApplication,
+      );
+      if (!launched && mounted) {
+        AppSnackBar.showError(
+          context,
+          'เปิดแอปโทรศัพท์ไม่ได้ กรุณาคัดลอกเบอร์แทน',
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        AppSnackBar.showError(
+          context,
+          'เปิดแอปโทรศัพท์ไม่ได้ กรุณาคัดลอกเบอร์แทน',
+        );
+      }
+    }
+  }
+
+  void _shareTripDetails() {
+    final String leaderName =
+        _leaderDriver != null && _leaderDriver!.fullName.isNotEmpty
         ? _leaderDriver!.fullName
         : 'ทีมคนขับ SafeSeat';
 
-    final String carInfo = widget.carDetails.trim().isNotEmpty
-        ? widget.carDetails
-        : 'รถยนต์ของผู้ใช้บริการ';
-
-    final String shareMessage =
-        '🛡️ SafeSeat — แจ้งเตือนการเดินทาง (Live Tracking)\n\n'
-        'ฉันกำลังเดินทางกลับอย่างปลอดภัยด้วยบริการคนขับแทน SafeSeat\n'
-        'คุณสามารถนำรหัสทริปไปตรวจสอบสถานะบริการและพิกัดการเดินทางสดได้:\n\n'
-        '🔖 รหัสทริป: #${widget.requestId}\n'
-        '🟢 สถานะบริการ: $_currentStatus\n'
-        '🚘 ยานพาหนะ: $carInfo\n'
-        '👤 ทีมคนขับ: $leaderName\n\n'
-        '-----------------------------------\n'
-        '🔍 วิธีติดตามการเดินทาง:\n'
-        '1. ไปที่เว็บไซต์ SafeSeat\n'
-        '2. เลือกเมนู "ติดตามการเดินทาง" (Live Trip Tracking)\n'
-        '3. ระบุรหัสทริป: #${widget.requestId}\n'
-        '-----------------------------------';
-
-    // Auto-copy the message to the clipboard so the user can paste it anywhere
-    Clipboard.setData(ClipboardData(text: shareMessage));
-    AppSnackBar.showSuccess(context, 'คัดลอกข้อความติดตามการเดินทางเรียบร้อยแล้ว');
+    final String shareMessage = [
+      'ข้อมูลการเดินทาง SafeSeat',
+      'หมายเลขการเดินทาง: #${widget.requestId}',
+      'สถานะล่าสุด: $_currentStatus',
+      'จุดรับ: $_pickupAddress',
+      'จุดส่ง: $_dropoffAddress',
+      'คนขับ: $leaderName',
+      'ข้อมูลนี้เป็นสถานะ ณ เวลาที่แชร์',
+    ].join('\n');
 
     final box = context.findRenderObject() as RenderBox?;
     Share.share(
       shareMessage,
-      subject: 'ติดตามการเดินทางของฉันบน SafeSeat (#${widget.requestId})',
-      sharePositionOrigin: box != null ? box.localToGlobal(Offset.zero) & box.size : null,
+      subject: 'ข้อมูลการเดินทาง SafeSeat #${widget.requestId}',
+      sharePositionOrigin: box != null
+          ? box.localToGlobal(Offset.zero) & box.size
+          : null,
     );
   }
 
   // Map status string to Thai display text and color/icon
   Map<String, dynamic> _getStatusUI() {
     final status = _currentStatus;
-    
+
     if (status == 'กำลังค้นหาคนขับ') {
       return {
         'title': 'กำลังค้นหาคนขับ',
-        'desc': 'ระบบกำลังค้นหาคู่หูคนขับที่อยู่ใกล้ที่สุดสำหรับคุณ',
+        'desc': 'กำลังหาทีมคนขับที่พร้อมรับงาน',
         'color': const Color(0xFF94A3B8),
         'icon': Icons.location_searching,
         'badgeColor': const Color(0xFFF1F5F9),
@@ -479,7 +556,7 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
     } else if (status == 'กำลังเดินทาง') {
       return {
         'title': 'กำลังนำทางไปปลายทาง',
-        'desc': 'อยู่ระหว่างการเดินทางไปยังจุดหมายปลายทางของคุณอย่างปลอดภัย',
+        'desc': 'คนขับกำลังพาคุณไปยังจุดส่ง',
         'color': const Color(0xFF7C3AED),
         'icon': Icons.local_taxi,
         'badgeColor': const Color(0xFFF3E8FF),
@@ -520,7 +597,7 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
-                color: AppTheme.primaryColor,
+                color: AppTheme.pickupColor,
                 borderRadius: BorderRadius.circular(8),
                 boxShadow: const [
                   BoxShadow(
@@ -544,7 +621,7 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
               width: 32,
               height: 32,
               decoration: BoxDecoration(
-                color: const Color(0xFFF97316),
+                color: AppTheme.pickupColor,
                 shape: BoxShape.circle,
                 border: Border.all(color: Colors.white, width: 2),
                 boxShadow: [
@@ -557,7 +634,7 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
               ),
               child: const Center(
                 child: Icon(
-                  Icons.sports_bar_rounded,
+                  Icons.location_on_rounded,
                   color: Colors.white,
                   size: 16,
                 ),
@@ -576,7 +653,7 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
-                color: const Color(0xFF0F172A),
+                color: AppTheme.dropoffColor,
                 borderRadius: BorderRadius.circular(8),
                 boxShadow: const [
                   BoxShadow(
@@ -600,7 +677,7 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
               width: 32,
               height: 32,
               decoration: BoxDecoration(
-                color: const Color(0xFF10B981),
+                color: AppTheme.dropoffColor,
                 shape: BoxShape.circle,
                 border: Border.all(color: Colors.white, width: 2),
                 boxShadow: [
@@ -612,11 +689,7 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
                 ],
               ),
               child: const Center(
-                child: Icon(
-                  Icons.home_rounded,
-                  color: Colors.white,
-                  size: 16,
-                ),
+                child: Icon(Icons.flag_rounded, color: Colors.white, size: 16),
               ),
             ),
           ],
@@ -699,7 +772,9 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
               right: 0,
               child: LinearProgressIndicator(
                 backgroundColor: Colors.transparent,
-                valueColor: AlwaysStoppedAnimation<Color>(AppTheme.primaryColor),
+                valueColor: AlwaysStoppedAnimation<Color>(
+                  AppTheme.primaryColor,
+                ),
               ),
             ),
 
@@ -707,7 +782,7 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
           Positioned(
             right: 16,
             top: MediaQuery.of(context).padding.top + 16,
-            child: FloatingActionButton.small(
+            child: FloatingActionButton(
               heroTag: 'recenter_btn',
               backgroundColor: Colors.white,
               foregroundColor: const Color(0xFF1E293B),
@@ -721,13 +796,14 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
           // Share Trip Button
           Positioned(
             right: 16,
-            top: MediaQuery.of(context).padding.top + 72,
-            child: FloatingActionButton.small(
+            top: MediaQuery.of(context).padding.top + 80,
+            child: FloatingActionButton(
               heroTag: 'share_trip_btn',
               backgroundColor: Colors.white,
               foregroundColor: AppTheme.primaryColor,
               elevation: 4,
-              onPressed: _shareTripLink,
+              onPressed: _shareTripDetails,
+              tooltip: 'แชร์ข้อมูลการเดินทาง',
               shape: const CircleBorder(),
               child: const Icon(Icons.share),
             ),
@@ -739,7 +815,10 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
               left: 16,
               top: MediaQuery.of(context).padding.top + 16,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(20),
@@ -757,13 +836,13 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
                       width: 8,
                       height: 8,
                       decoration: const BoxDecoration(
-                        color: Colors.green,
+                        color: AppTheme.successColor,
                         shape: BoxShape.circle,
                       ),
                     ),
                     const SizedBox(width: 8),
                     const Text(
-                      'กำลังติดตามตำแหน่งปัจจุบัน',
+                      'ติดตามสด',
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.bold,
@@ -805,7 +884,12 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
                   child: SafeArea(
                     top: false,
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(24.0, 12.0, 24.0, 24.0),
+                      padding: const EdgeInsets.fromLTRB(
+                        24.0,
+                        12.0,
+                        24.0,
+                        24.0,
+                      ),
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -824,82 +908,96 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
                           ),
 
                           // Status Section
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  color: statusUI['badgeColor'] as Color,
-                                  shape: BoxShape.circle,
+                          Container(
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(
+                              color: AppTheme.backgroundColor,
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: AppTheme.borderColor),
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: statusUI['badgeColor'] as Color,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: Icon(
+                                    statusUI['icon'] as IconData,
+                                    color: statusUI['color'] as Color,
+                                    size: 28,
+                                  ),
                                 ),
-                                child: Icon(
-                                  statusUI['icon'] as IconData,
-                                  color: statusUI['color'] as Color,
-                                  size: 28,
-                                ),
-                              ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        const Text(
-                                          'สถานะบริการ',
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w600,
-                                            color: Color(0xFF64748B),
-                                          ),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 8,
-                                            vertical: 2,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: (statusUI['color'] as Color)
-                                                .withValues(alpha: 0.12),
-                                            borderRadius:
-                                                BorderRadius.circular(6),
-                                          ),
-                                          child: Text(
-                                            _currentStatus,
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Wrap(
+                                        spacing: 8,
+                                        runSpacing: 4,
+                                        crossAxisAlignment:
+                                            WrapCrossAlignment.center,
+                                        children: [
+                                          const Text(
+                                            'สถานะบริการ',
                                             style: TextStyle(
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.bold,
-                                              color: statusUI['color'] as Color,
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w600,
+                                              color: Color(0xFF64748B),
                                             ),
                                           ),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 8,
+                                              vertical: 2,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color:
+                                                  (statusUI['color'] as Color)
+                                                      .withValues(alpha: 0.12),
+                                              borderRadius:
+                                                  BorderRadius.circular(6),
+                                            ),
+                                            child: Text(
+                                              _currentStatus,
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.bold,
+                                                color:
+                                                    statusUI['color'] as Color,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 6),
+                                      Text(
+                                        statusUI['title'] as String,
+                                        style: TextStyle(
+                                          fontSize: 20,
+                                          fontWeight: FontWeight.bold,
+                                          color: AppTheme.textPrimary,
                                         ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 6),
-                                    Text(
-                                      statusUI['title'] as String,
-                                      style: TextStyle(
-                                        fontSize: 20,
-                                        fontWeight: FontWeight.bold,
-                                        color: statusUI['color'] as Color,
                                       ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      statusUI['desc'] as String,
-                                      style: const TextStyle(
-                                        fontSize: 14,
-                                        color: Color(0xFF64748B),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        statusUI['desc'] as String,
+                                        style: const TextStyle(
+                                          fontSize: 14,
+                                          color: Color(0xFF64748B),
+                                        ),
                                       ),
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
-                          
+
                           const SizedBox(height: 16),
 
                           // Route Summary Card (จุดรับ - จุดส่ง)
@@ -922,14 +1020,15 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
                                       width: 10,
                                       height: 10,
                                       decoration: const BoxDecoration(
-                                        color: Colors.red,
+                                        color: AppTheme.pickupColor,
                                         shape: BoxShape.circle,
                                       ),
                                     ),
                                     const SizedBox(width: 12),
                                     Expanded(
                                       child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
                                         children: [
                                           const Text(
                                             'จุดรับ',
@@ -941,7 +1040,7 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
                                           ),
                                           const SizedBox(height: 2),
                                           Text(
-                                            widget.pickupAddress,
+                                            _pickupAddress,
                                             style: const TextStyle(
                                               fontSize: 13,
                                               fontWeight: FontWeight.w600,
@@ -976,14 +1075,15 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
                                       width: 10,
                                       height: 10,
                                       decoration: const BoxDecoration(
-                                        color: Color(0xFF10B981),
+                                        color: AppTheme.dropoffColor,
                                         shape: BoxShape.circle,
                                       ),
                                     ),
                                     const SizedBox(width: 12),
                                     Expanded(
                                       child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
                                         children: [
                                           const Text(
                                             'จุดส่ง',
@@ -995,7 +1095,7 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
                                           ),
                                           const SizedBox(height: 2),
                                           Text(
-                                            widget.dropoffAddress,
+                                            _dropoffAddress,
                                             style: const TextStyle(
                                               fontSize: 13,
                                               fontWeight: FontWeight.w600,
@@ -1012,13 +1112,13 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
                               ],
                             ),
                           ),
-                          
+
                           const Divider(height: 32),
 
                           // Driver Profiles / Vehicle Card
                           if (_leaderDriver != null) ...[
                             const Text(
-                              'ทีมคู่หูคนขับของคุณ',
+                              'ทีมคนขับของคุณ',
                               style: TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.bold,
@@ -1031,7 +1131,9 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
                               decoration: BoxDecoration(
                                 color: const Color(0xFFF8FAFC),
                                 borderRadius: BorderRadius.circular(20),
-                                border: Border.all(color: const Color(0xFFF1F5F9)),
+                                border: Border.all(
+                                  color: const Color(0xFFF1F5F9),
+                                ),
                               ),
                               child: Column(
                                 children: [
@@ -1039,8 +1141,10 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
                                   Row(
                                     children: [
                                       DriverAvatar(
-                                        imageUrl: _leaderDriver!.resolvedImageUrl,
-                                        fallbackName: '${_leaderDriver!.firstname} ${_leaderDriver!.lastname}',
+                                        imageUrl:
+                                            _leaderDriver!.resolvedImageUrl,
+                                        fallbackName:
+                                            '${_leaderDriver!.firstname} ${_leaderDriver!.lastname}',
                                         radius: 22,
                                         badgeText: 'D1',
                                         badgeColor: const Color(0xFF2563EB),
@@ -1048,7 +1152,8 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
                                       const SizedBox(width: 12),
                                       Expanded(
                                         child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
                                           children: [
                                             Text(
                                               'คนขับหลัก: ${_leaderDriver!.firstname} ${_leaderDriver!.lastname}',
@@ -1069,7 +1174,10 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
                                         ),
                                       ),
                                       IconButton(
-                                        icon: const Icon(Icons.phone, color: Colors.green),
+                                        icon: const Icon(
+                                          Icons.phone,
+                                          color: Colors.green,
+                                        ),
                                         onPressed: () => _showCallDialog(
                                           'คนขับหลัก',
                                           '${_leaderDriver!.firstname} ${_leaderDriver!.lastname}',
@@ -1078,18 +1186,22 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
                                       ),
                                     ],
                                   ),
-                                  
+
                                   if (_followerDriver != null) ...[
                                     const Padding(
-                                      padding: EdgeInsets.symmetric(vertical: 8.0),
+                                      padding: EdgeInsets.symmetric(
+                                        vertical: 8.0,
+                                      ),
                                       child: Divider(color: Color(0xFFE2E8F0)),
                                     ),
                                     // Follower Info Row
                                     Row(
                                       children: [
                                         DriverAvatar(
-                                          imageUrl: _followerDriver!.resolvedImageUrl,
-                                          fallbackName: '${_followerDriver!.firstname} ${_followerDriver!.lastname}',
+                                          imageUrl:
+                                              _followerDriver!.resolvedImageUrl,
+                                          fallbackName:
+                                              '${_followerDriver!.firstname} ${_followerDriver!.lastname}',
                                           radius: 22,
                                           badgeText: 'D2',
                                           badgeColor: const Color(0xFF475569),
@@ -1098,7 +1210,8 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
                                         const SizedBox(width: 12),
                                         Expanded(
                                           child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
                                             children: [
                                               Text(
                                                 'คนขับรถผู้ช่วย: ${_followerDriver!.firstname} ${_followerDriver!.lastname}',
@@ -1108,18 +1221,21 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
                                                   color: Color(0xFF1E293B),
                                                 ),
                                               ),
-                                               Text(
-                                                 'รถขับตาม: ${_followerDriver!.vehicleSummary}',
-                                                 style: const TextStyle(
-                                                   fontSize: 12,
-                                                   color: Color(0xFF64748B),
-                                                 ),
-                                               ),
+                                              Text(
+                                                'รถขับตาม: ${_followerDriver!.vehicleSummary}',
+                                                style: const TextStyle(
+                                                  fontSize: 12,
+                                                  color: Color(0xFF64748B),
+                                                ),
+                                              ),
                                             ],
                                           ),
                                         ),
                                         IconButton(
-                                          icon: const Icon(Icons.phone, color: Colors.green),
+                                          icon: const Icon(
+                                            Icons.phone,
+                                            color: Colors.green,
+                                          ),
                                           onPressed: () => _showCallDialog(
                                             'คนขับผู้ช่วย',
                                             '${_followerDriver!.firstname} ${_followerDriver!.lastname}',
@@ -1139,30 +1255,41 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text(
-                                    'ยานพาหนะที่จะให้ขับ',
-                                    style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    widget.carDetails,
-                                    style: const TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.bold,
-                                      color: Color(0xFF1E293B),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      'ยานพาหนะที่จะให้ขับ',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Color(0xFF64748B),
+                                      ),
                                     ),
-                                  ),
-                                ],
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      widget.carDetails,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.bold,
+                                        color: Color(0xFF1E293B),
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
+                              const SizedBox(width: 12),
                               Column(
                                 crossAxisAlignment: CrossAxisAlignment.end,
                                 children: [
                                   const Text(
                                     'ค่าบริการสุทธิ',
-                                    style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Color(0xFF64748B),
+                                    ),
                                   ),
                                   const SizedBox(height: 2),
                                   Text(
@@ -1187,21 +1314,31 @@ class _ActiveTripScreenState extends ConsumerState<ActiveTripScreen> {
                             child: ElevatedButton(
                               onPressed: isTripCompleted
                                   ? () {
-                                      Navigator.of(context).pop(); // Pops this screen back to HomeScreen
+                                      Navigator.of(
+                                        context,
+                                      ).pop(); // Pops this screen back to HomeScreen
                                     }
                                   : null,
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: isTripCompleted ? AppTheme.primaryColor : const Color(0xFFE2E8F0),
+                                backgroundColor: isTripCompleted
+                                    ? AppTheme.primaryColor
+                                    : const Color(0xFFE2E8F0),
                                 foregroundColor: Colors.white,
-                                disabledBackgroundColor: const Color(0xFFE2E8F0),
-                                disabledForegroundColor: const Color(0xFF94A3B8),
+                                disabledBackgroundColor: const Color(
+                                  0xFFE2E8F0,
+                                ),
+                                disabledForegroundColor: const Color(
+                                  0xFF94A3B8,
+                                ),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(28),
                                 ),
                                 elevation: isTripCompleted ? 4 : 0,
                               ),
                               child: Text(
-                                isTripCompleted ? 'กลับสู่หน้าหลัก' : 'กำลังนำทางโดยคนขับรถมืออาชีพ...',
+                                isTripCompleted
+                                    ? 'กลับสู่หน้าหลัก'
+                                    : 'กำลังนำทางโดยคนขับรถมืออาชีพ...',
                                 style: const TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.bold,

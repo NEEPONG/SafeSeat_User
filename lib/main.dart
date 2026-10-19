@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:safeseat_mini/core/theme/app_theme.dart';
 import 'package:safeseat_mini/features/auth/login_screen.dart';
 
 Future<void> main() async {
@@ -24,7 +25,7 @@ class MainApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Safe Seat',
-      theme: ThemeData(fontFamily: 'Kanit'),
+      theme: AppTheme.lightTheme,
       home: const LoginScreen(),
     );
   }

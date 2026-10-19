@@ -39,10 +39,7 @@ class RequestDriverState {
 class RequestDriverController extends Notifier<RequestDriverState> {
   @override
   RequestDriverState build() {
-    return RequestDriverState(
-      pickupAddress: 'แม่โจ้, หอพักพนม',
-      pickupLatLng: const LatLng(18.8972, 99.0112), // default Maejo University area
-    );
+    return RequestDriverState();
   }
 
   void setPickup(String address, LatLng latLng) {
@@ -54,10 +51,7 @@ class RequestDriverController extends Notifier<RequestDriverState> {
   }
 
   void clearRequest() {
-    state = RequestDriverState(
-      pickupAddress: 'แม่โจ้, หอพักพนม',
-      pickupLatLng: const LatLng(18.8972, 99.0112),
-    );
+    state = RequestDriverState();
   }
 
   /// Sends the designated driver request to the backend
@@ -124,6 +118,5 @@ class RequestDriverController extends Notifier<RequestDriverState> {
 
 final requestDriverControllerProvider =
     NotifierProvider<RequestDriverController, RequestDriverState>(() {
-  return RequestDriverController();
-});
-
+      return RequestDriverController();
+    });

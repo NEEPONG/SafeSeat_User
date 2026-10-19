@@ -17,7 +17,8 @@ class RequestDriverScreen extends ConsumerStatefulWidget {
   const RequestDriverScreen({super.key});
 
   @override
-  ConsumerState<RequestDriverScreen> createState() => _RequestDriverScreenState();
+  ConsumerState<RequestDriverScreen> createState() =>
+      _RequestDriverScreenState();
 }
 
 class _RequestDriverScreenState extends ConsumerState<RequestDriverScreen> {
@@ -39,30 +40,43 @@ class _RequestDriverScreenState extends ConsumerState<RequestDriverScreen> {
       final goToProfile = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
           title: const Row(
             children: [
               Icon(Icons.home_outlined, color: AppTheme.primaryColor),
               SizedBox(width: 8),
-              Text('ยังไม่ได้ตั้งค่าที่อยู่บ้าน', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              Text(
+                'ยังไม่ได้ตั้งค่าที่อยู่บ้าน',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
             ],
           ),
           content: const Text(
-            'คุณยังไม่ได้บันทึกสถานที่ตั้งต้น/บ้านไว้ในโปรไฟล์ ต้องการไปตั้งค่าตอนนี้หรือไม่?',
+            'คุณยังไม่ได้บันทึกที่อยู่บ้านในโปรไฟล์ ต้องการไปตั้งค่าตอนนี้หรือไม่?',
             style: TextStyle(fontSize: 14, color: Color(0xFF64748B)),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('ไว้ทีหลัง', style: TextStyle(color: Colors.grey)),
+              child: const Text(
+                'ไว้ทีหลัง',
+                style: TextStyle(color: Colors.grey),
+              ),
             ),
             ElevatedButton(
               onPressed: () => Navigator.pop(ctx, true),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.primaryColor,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
-              child: const Text('ไปตั้งค่าโปรไฟล์', style: TextStyle(color: Colors.white)),
+              child: const Text(
+                'ไปตั้งค่าโปรไฟล์',
+                style: TextStyle(color: Colors.white),
+              ),
             ),
           ],
         ),
@@ -75,16 +89,18 @@ class _RequestDriverScreenState extends ConsumerState<RequestDriverScreen> {
       return;
     }
 
-    // 1. If exact pinned LatLng is available in profile, use it directly (100% accurate!)
+    // Use the location pinned in the profile when available.
     if (user?.homeLatLng != null) {
       final latLng = user!.homeLatLng!;
-      ref.read(requestDriverControllerProvider.notifier).setDropoff(homeDisplayName, latLng);
+      ref
+          .read(requestDriverControllerProvider.notifier)
+          .setDropoff(homeDisplayName, latLng);
       _mapController.move(latLng, 15.0);
       AppSnackBar.showSuccess(context, 'ตั้งปลายทางกลับบ้านเรียบร้อยแล้ว');
       return;
     }
 
-    // 2. Fallback to geocoding if only plain string was saved
+    // Look up coordinates when the profile only has an address.
     setState(() {
       _isLoadingHome = true;
     });
@@ -93,37 +109,43 @@ class _RequestDriverScreenState extends ConsumerState<RequestDriverScreen> {
       final searchUrl = Uri.parse(
         'https://nominatim.openstreetmap.org/search?q=${Uri.encodeComponent(homeDisplayName)}&format=json&limit=1',
       );
-      final response = await http.get(searchUrl, headers: {
-        'User-Agent': 'SafeSeatMiniApp/1.0',
-        'Accept-Language': 'th,en',
-      });
+      final response = await http
+          .get(
+            searchUrl,
+            headers: {
+              'User-Agent': 'SafeSeatMiniApp/1.0',
+              'Accept-Language': 'th,en',
+            },
+          )
+          .timeout(const Duration(seconds: 12));
       if (response.statusCode == 200) {
         final List data = jsonDecode(response.body);
         if (data.isNotEmpty) {
           final lat = double.parse(data[0]['lat'].toString());
           final lon = double.parse(data[0]['lon'].toString());
           final latLng = LatLng(lat, lon);
-          ref.read(requestDriverControllerProvider.notifier).setDropoff(homeDisplayName, latLng);
+          if (!mounted) return;
+          ref
+              .read(requestDriverControllerProvider.notifier)
+              .setDropoff(homeDisplayName, latLng);
           _mapController.move(latLng, 15.0);
-          if (mounted) {
-            setState(() {
-              _isLoadingHome = false;
-            });
-            AppSnackBar.showSuccess(context, 'ตั้งปลายทางกลับบ้านเรียบร้อยแล้ว');
-          }
+          setState(() {
+            _isLoadingHome = false;
+          });
+          AppSnackBar.showSuccess(context, 'ตั้งปลายทางกลับบ้านเรียบร้อยแล้ว');
           return;
         }
       }
     } catch (_) {}
 
-    // Fallback coordinates if geocode is unavailable
-    final fallbackLatLng = const LatLng(18.8972, 99.0112);
-    ref.read(requestDriverControllerProvider.notifier).setDropoff(homeDisplayName, fallbackLatLng);
     if (mounted) {
       setState(() {
         _isLoadingHome = false;
       });
-      AppSnackBar.showSuccess(context, 'ตั้งปลายทางกลับบ้านเรียบร้อยแล้ว');
+      AppSnackBar.showWarning(
+        context,
+        'หาพิกัดบ้านไม่พบ โปรดเลือกจุดส่งบนแผนที่',
+      );
     }
   }
 
@@ -132,7 +154,7 @@ class _RequestDriverScreenState extends ConsumerState<RequestDriverScreen> {
       final serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
         if (mounted) {
-          AppSnackBar.showWarning(context, 'กรุณาเปิดบริการระบุตำแหน่ง (GPS)');
+          AppSnackBar.showWarning(context, 'โปรดเปิดบริการระบุตำแหน่ง');
         }
         return;
       }
@@ -142,14 +164,19 @@ class _RequestDriverScreenState extends ConsumerState<RequestDriverScreen> {
         permission = await Geolocator.requestPermission();
         if (permission == LocationPermission.denied) {
           if (mounted) {
-            AppSnackBar.showWarning(context, 'สิทธิ์การเข้าถึงตำแหน่งถูกปฏิเสธ');
+            AppSnackBar.showWarning(
+              context,
+              'สิทธิ์การเข้าถึงตำแหน่งถูกปฏิเสธ',
+            );
           }
           return;
         }
       }
 
       final position = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+        ),
       );
       final latLng = LatLng(position.latitude, position.longitude);
 
@@ -159,10 +186,13 @@ class _RequestDriverScreenState extends ConsumerState<RequestDriverScreen> {
         final url = Uri.parse(
           'https://nominatim.openstreetmap.org/reverse?format=json&lat=${latLng.latitude}&lon=${latLng.longitude}&zoom=18&addressdetails=1',
         );
-        final res = await http.get(url, headers: {
-          'User-Agent': 'SafeSeatMiniApp/1.0',
-          'Accept-Language': 'th,en',
-        });
+        final res = await http.get(
+          url,
+          headers: {
+            'User-Agent': 'SafeSeatMiniApp/1.0',
+            'Accept-Language': 'th,en',
+          },
+        );
         if (res.statusCode == 200) {
           final data = jsonDecode(res.body);
           final displayName = data['display_name'] as String?;
@@ -173,7 +203,9 @@ class _RequestDriverScreenState extends ConsumerState<RequestDriverScreen> {
         }
       } catch (_) {}
 
-      ref.read(requestDriverControllerProvider.notifier).setPickup(shortName, latLng);
+      ref
+          .read(requestDriverControllerProvider.notifier)
+          .setPickup(shortName, latLng);
       _mapController.move(latLng, 16.0);
       if (mounted) {
         AppSnackBar.showSuccess(context, 'อัปเดตจุดรับเป็นตำแหน่งปัจจุบันแล้ว');
@@ -219,7 +251,7 @@ class _RequestDriverScreenState extends ConsumerState<RequestDriverScreen> {
                   vertical: 5,
                 ),
                 decoration: BoxDecoration(
-                  color: AppTheme.primaryColor,
+                  color: AppTheme.pickupColor,
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: const Text(
@@ -233,7 +265,7 @@ class _RequestDriverScreenState extends ConsumerState<RequestDriverScreen> {
               ),
               const Icon(
                 Icons.location_on,
-                color: Colors.red,
+                color: AppTheme.pickupColor,
                 size: 32,
               ),
             ],
@@ -255,7 +287,7 @@ class _RequestDriverScreenState extends ConsumerState<RequestDriverScreen> {
                   vertical: 5,
                 ),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF0F172A),
+                  color: AppTheme.dropoffColor,
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: const Text(
@@ -269,7 +301,7 @@ class _RequestDriverScreenState extends ConsumerState<RequestDriverScreen> {
               ),
               const Icon(
                 Icons.location_on,
-                color: Color(0xFF10B981),
+                color: AppTheme.dropoffColor,
                 size: 32,
               ),
             ],
@@ -303,25 +335,16 @@ class _RequestDriverScreenState extends ConsumerState<RequestDriverScreen> {
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.all(16.0),
-              child: GestureDetector(
-                onTap: () => Navigator.of(context).pop(),
-                child: Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.15),
-                        blurRadius: 8,
-                        offset: const Offset(0, 3),
-                      ),
-                    ],
-                  ),
-                  child: const Icon(
+              child: Material(
+                color: Colors.white,
+                elevation: 3,
+                shape: const CircleBorder(),
+                child: IconButton(
+                  tooltip: 'ย้อนกลับ',
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(
                     Icons.arrow_back,
-                    color: Color(0xFF1E293B),
-                    size: 24,
+                    color: AppTheme.textPrimary,
                   ),
                 ),
               ),
@@ -334,9 +357,11 @@ class _RequestDriverScreenState extends ConsumerState<RequestDriverScreen> {
             right: 0,
             bottom: 0,
             child: Container(
-              padding: const EdgeInsets.all(24.0),
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.sizeOf(context).height * 0.72,
+              ),
               decoration: const BoxDecoration(
-                color: Colors.white,
+                color: AppTheme.surfaceColor,
                 borderRadius: BorderRadius.only(
                   topLeft: Radius.circular(30),
                   topRight: Radius.circular(30),
@@ -350,286 +375,385 @@ class _RequestDriverScreenState extends ConsumerState<RequestDriverScreen> {
                   ),
                 ],
               ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // From: Pickup Location Row
-                  InkWell(
-                    onTap: () => _navigateToSelectLocation(isPickup: true),
-                    borderRadius: BorderRadius.circular(16),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 4.0),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 20,
-                            height: 20,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              border: Border.all(color: Colors.red, width: 6),
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'จุดรับ',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: Color(0xFF94A3B8),
-                                    fontWeight: FontWeight.w500,
-                                  ),
+              child: SafeArea(
+                top: false,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Flexible(
+                      fit: FlexFit.loose,
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.fromLTRB(24, 12, 24, 8),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Center(
+                              child: Container(
+                                width: 40,
+                                height: 4,
+                                decoration: BoxDecoration(
+                                  color: AppTheme.borderColor,
+                                  borderRadius: BorderRadius.circular(4),
                                 ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  reqState.pickupAddress ?? 'ปักหมุดจุดรับ',
-                                  style: const TextStyle(
-                                    fontSize: 16,
-                                    color: Color(0xFF334155),
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ],
-                            ),
-                          ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFF1F5F9),
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: const Text(
-                              'จุดรับ',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Color(0xFF64748B),
-                                fontWeight: FontWeight.bold,
                               ),
                             ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 12.0),
-                    child: Divider(height: 24, color: Color(0xFFE2E8F0)),
-                  ),
-
-                  // To: Dropoff Location Row
-                  InkWell(
-                    onTap: () => _navigateToSelectLocation(isPickup: false),
-                    borderRadius: BorderRadius.circular(16),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 4.0),
-                      child: Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(4),
-                            decoration: const BoxDecoration(
-                              color: Color(0xFF64748B),
-                              shape: BoxShape.circle,
+                            const SizedBox(height: 16),
+                            const Text(
+                              'กำหนดเส้นทาง',
+                              style: TextStyle(
+                                fontSize: 22,
+                                fontWeight: FontWeight.w700,
+                                color: AppTheme.textPrimary,
+                              ),
                             ),
-                            child: const Icon(
-                              Icons.flag,
-                              color: Colors.white,
-                              size: 14,
+                            const Text(
+                              'เลือกจุดรับและปลายทางก่อนตรวจสอบรายละเอียด',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: AppTheme.textSecondary,
+                              ),
                             ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'จุดส่ง',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: Color(0xFF94A3B8),
-                                    fontWeight: FontWeight.w500,
-                                  ),
+                            const SizedBox(height: 14),
+                            // From: Pickup Location Row
+                            InkWell(
+                              onTap: () =>
+                                  _navigateToSelectLocation(isPickup: true),
+                              borderRadius: BorderRadius.circular(16),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 8.0,
+                                  horizontal: 4.0,
                                 ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  reqState.dropoffAddress ?? 'กรอกจุดส่งเพื่อค้นหา',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    color: reqState.dropoffAddress != null
-                                        ? const Color(0xFF334155)
-                                        : const Color(0xFF94A3B8),
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ],
-                            ),
-                          ),
-                          const Icon(
-                            Icons.chevron_right,
-                            color: Color(0xFF94A3B8),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  
-                  const SizedBox(height: 16),
-
-                  // Quick Destination Shortcuts Row
-                  Row(
-                    children: [
-                      // 🏠 กลับบ้าน (Go Home)
-                      Expanded(
-                        child: InkWell(
-                          onTap: _isLoadingHome ? null : _handleQuickSelectHome,
-                          borderRadius: BorderRadius.circular(14),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFF8FAFC),
-                              borderRadius: BorderRadius.circular(14),
-                              border: Border.all(color: const Color(0xFFE2E8F0)),
-                            ),
-                            child: Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(6),
-                                  decoration: BoxDecoration(
-                                    color: AppTheme.primaryColor.withValues(alpha: 0.12),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: _isLoadingHome
-                                      ? const SizedBox(
-                                          width: 16,
-                                          height: 16,
-                                          child: CircularProgressIndicator(strokeWidth: 2),
-                                        )
-                                      : const Icon(
-                                          Icons.home,
-                                          color: AppTheme.primaryColor,
-                                          size: 16,
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: 20,
+                                      height: 20,
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        border: Border.all(
+                                          color: AppTheme.pickupColor,
+                                          width: 6,
                                         ),
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      const Text(
-                                        'กลับบ้าน 🏠',
+                                      ),
+                                    ),
+                                    const SizedBox(width: 16),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          const Text(
+                                            'จุดรับ',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: Color(0xFF94A3B8),
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            reqState.pickupAddress ??
+                                                'ปักหมุดจุดรับ',
+                                            style: const TextStyle(
+                                              fontSize: 16,
+                                              color: Color(0xFF334155),
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 8,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFF1F5F9),
+                                        borderRadius: BorderRadius.circular(20),
+                                      ),
+                                      child: const Text(
+                                        'จุดรับ',
                                         style: TextStyle(
                                           fontSize: 12,
+                                          color: Color(0xFF64748B),
                                           fontWeight: FontWeight.bold,
-                                          color: Color(0xFF1E293B),
                                         ),
                                       ),
-                                      Text(
-                                        user?.homeDisplayName != null && user!.homeDisplayName!.trim().isNotEmpty
-                                            ? user.homeDisplayName!
-                                            : 'ตั้งค่าที่อยู่บ้าน',
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          color: user?.homeDisplayName != null && user!.homeDisplayName!.trim().isNotEmpty
-                                              ? const Color(0xFF64748B)
-                                              : AppTheme.primaryColor,
-                                        ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+
+                            const Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 12.0),
+                              child: Divider(
+                                height: 24,
+                                color: Color(0xFFE2E8F0),
+                              ),
+                            ),
+
+                            // To: Dropoff Location Row
+                            InkWell(
+                              onTap: () =>
+                                  _navigateToSelectLocation(isPickup: false),
+                              borderRadius: BorderRadius.circular(16),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 8.0,
+                                  horizontal: 4.0,
+                                ),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(4),
+                                      decoration: const BoxDecoration(
+                                        color: AppTheme.dropoffColor,
+                                        shape: BoxShape.circle,
                                       ),
-                                    ],
+                                      child: const Icon(
+                                        Icons.flag,
+                                        color: Colors.white,
+                                        size: 14,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 16),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          const Text(
+                                            'จุดส่ง',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: Color(0xFF94A3B8),
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            reqState.dropoffAddress ??
+                                                'กรอกจุดส่งเพื่อค้นหา',
+                                            style: TextStyle(
+                                              fontSize: 16,
+                                              color:
+                                                  reqState.dropoffAddress !=
+                                                      null
+                                                  ? const Color(0xFF334155)
+                                                  : const Color(0xFF94A3B8),
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const Icon(
+                                      Icons.chevron_right,
+                                      color: Color(0xFF94A3B8),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+
+                            const SizedBox(height: 16),
+
+                            // Quick Destination Shortcuts Row
+                            Row(
+                              children: [
+                                // 🏠 กลับบ้าน (Go Home)
+                                Expanded(
+                                  child: InkWell(
+                                    onTap: _isLoadingHome
+                                        ? null
+                                        : _handleQuickSelectHome,
+                                    borderRadius: BorderRadius.circular(14),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 10,
+                                        vertical: 8,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFF8FAFC),
+                                        borderRadius: BorderRadius.circular(14),
+                                        border: Border.all(
+                                          color: const Color(0xFFE2E8F0),
+                                        ),
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          Container(
+                                            padding: const EdgeInsets.all(6),
+                                            decoration: BoxDecoration(
+                                              color: AppTheme.primaryColor
+                                                  .withValues(alpha: 0.12),
+                                              shape: BoxShape.circle,
+                                            ),
+                                            child: _isLoadingHome
+                                                ? const SizedBox(
+                                                    width: 16,
+                                                    height: 16,
+                                                    child:
+                                                        CircularProgressIndicator(
+                                                          strokeWidth: 2,
+                                                        ),
+                                                  )
+                                                : const Icon(
+                                                    Icons.home,
+                                                    color:
+                                                        AppTheme.primaryColor,
+                                                    size: 16,
+                                                  ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                const Text(
+                                                  'กลับบ้าน 🏠',
+                                                  style: TextStyle(
+                                                    fontSize: 12,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: Color(0xFF1E293B),
+                                                  ),
+                                                ),
+                                                Text(
+                                                  user?.homeDisplayName !=
+                                                              null &&
+                                                          user!.homeDisplayName!
+                                                              .trim()
+                                                              .isNotEmpty
+                                                      ? user.homeDisplayName!
+                                                      : 'ตั้งค่าที่อยู่บ้าน',
+                                                  style: TextStyle(
+                                                    fontSize: 11,
+                                                    color:
+                                                        user?.homeDisplayName !=
+                                                                null &&
+                                                            user!
+                                                                .homeDisplayName!
+                                                                .trim()
+                                                                .isNotEmpty
+                                                        ? const Color(
+                                                            0xFF64748B,
+                                                          )
+                                                        : AppTheme.primaryColor,
+                                                  ),
+                                                  maxLines: 1,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                // 📍 จุดรับปัจจุบัน (GPS)
+                                InkWell(
+                                  onTap: _handleSetCurrentLocationAsPickup,
+                                  borderRadius: BorderRadius.circular(14),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 8,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFF8FAFC),
+                                      borderRadius: BorderRadius.circular(14),
+                                      border: Border.all(
+                                        color: const Color(0xFFE2E8F0),
+                                      ),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.all(6),
+                                          decoration: BoxDecoration(
+                                            color: AppTheme.pickupColor
+                                                .withValues(alpha: 0.1),
+                                            shape: BoxShape.circle,
+                                          ),
+                                          child: const Icon(
+                                            Icons.my_location,
+                                            color: AppTheme.pickupColor,
+                                            size: 16,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 6),
+                                        const Text(
+                                          'รับที่นี่',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                            color: Color(0xFF1E293B),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                 ),
                               ],
                             ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      // 📍 จุดรับปัจจุบัน (GPS)
-                      InkWell(
-                        onTap: _handleSetCurrentLocationAsPickup,
-                        borderRadius: BorderRadius.circular(14),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFF8FAFC),
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(color: const Color(0xFFE2E8F0)),
-                          ),
-                          child: Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(6),
-                                decoration: BoxDecoration(
-                                  color: Colors.red.withValues(alpha: 0.1),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: const Icon(
-                                  Icons.my_location,
-                                  color: Colors.red,
-                                  size: 16,
-                                ),
-                              ),
-                              const SizedBox(width: 6),
-                              const Text(
-                                'จุดรับปัจจุบัน',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFF1E293B),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  
-                  const SizedBox(height: 20),
-
-                  // Call Driver Action Button
-                  SizedBox(
-                    width: double.infinity,
-                    height: 56,
-                    child: ElevatedButton(
-                      onPressed: reqState.dropoffLatLng == null
-                          ? null
-                          : () {
-                              Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (context) => const RequestDriverDetailsScreen(),
-                                ),
-                              );
-                            },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: themeColor,
-                        foregroundColor: Colors.white,
-                        disabledBackgroundColor: Colors.grey[200],
-                        disabledForegroundColor: Colors.grey[400],
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(28),
-                        ),
-                        elevation: 0,
-                      ),
-                      child: const Text(
-                        'เรียกรถ',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
+                          ],
                         ),
                       ),
                     ),
-                  ),
-                ],
+                    // Keep the next step visible while the route fields scroll.
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(24, 8, 24, 20),
+                      child: SizedBox(
+                        width: double.infinity,
+                        height: 56,
+                        child: ElevatedButton(
+                          onPressed:
+                              reqState.pickupLatLng == null ||
+                                  reqState.dropoffLatLng == null
+                              ? null
+                              : () {
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (context) =>
+                                          const RequestDriverDetailsScreen(),
+                                    ),
+                                  );
+                                },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: themeColor,
+                            foregroundColor: Colors.white,
+                            disabledBackgroundColor: Colors.grey[200],
+                            disabledForegroundColor: Colors.grey[400],
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(28),
+                            ),
+                            elevation: 0,
+                          ),
+                          child: const Text(
+                            'ตรวจสอบรายละเอียด',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

@@ -1,15 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:safeseat_mini/core/theme/app_theme.dart';
 import 'package:safeseat_mini/core/controllers/user_controller.dart';
+import 'package:safeseat_mini/core/theme/app_theme.dart';
 import 'package:safeseat_mini/core/utils/app_feedback.dart';
-import 'package:safeseat_mini/core/utils/validators.dart';
 import 'package:safeseat_mini/features/profile/controllers/profile_controller.dart';
 
 class WalletScreen extends ConsumerStatefulWidget {
   final VoidCallback? onBackToHome;
-
   const WalletScreen({super.key, this.onBackToHome});
 
   @override
@@ -18,338 +16,77 @@ class WalletScreen extends ConsumerStatefulWidget {
 
 class _WalletScreenState extends ConsumerState<WalletScreen> {
   final _formKey = GlobalKey<FormState>();
-  final TextEditingController _customAmountController = TextEditingController();
-  final FocusNode _customAmountFocusNode = FocusNode();
-
-  final List<int> _predefinedAmounts = [100, 200, 300, 500, 1000, 2000];
+  final _amountController = TextEditingController(text: '200');
+  final _amountFocus = FocusNode();
+  static const _amounts = [100, 200, 300, 500, 1000, 2000];
+  bool _submitting = false;
+  bool _refreshing = false;
 
   @override
   void initState() {
     super.initState();
-    // Default selected amount is 200, matching the screenshot
-    _customAmountController.text = '200';
-
-    // Fetch latest user profile to get current balance on load
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final user = ref.read(userProvider);
-      if (user != null) {
-        ref.read(profileControllerProvider.notifier).getUserProfile(user.phoneNo);
-      }
-    });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _refreshBalance());
   }
 
   @override
   void dispose() {
-    _customAmountController.dispose();
-    _customAmountFocusNode.dispose();
+    _amountController.dispose();
+    _amountFocus.dispose();
     super.dispose();
   }
 
-  void _selectPredefinedAmount(int amount) {
-    setState(() {
-      _customAmountController.text = amount.toString();
-      _customAmountFocusNode.unfocus();
-    });
-    _formKey.currentState?.validate();
+  Future<void> _refreshBalance() async {
+    final user = ref.read(userProvider);
+    if (user == null || _refreshing) return;
+    setState(() => _refreshing = true);
+    await ref
+        .read(profileControllerProvider.notifier)
+        .getUserProfile(user.phoneNo);
+    if (mounted) setState(() => _refreshing = false);
   }
 
-  double _getFinalAmount() {
-    if (_customAmountController.text.isNotEmpty) {
-      return double.tryParse(_customAmountController.text) ?? 0.0;
+  String _formatAmount(num amount) => amount
+      .toStringAsFixed(2)
+      .replaceAllMapped(
+        RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+        (match) => '${match[1]},',
+      );
+
+  String? _validateAmount(String? value) {
+    final amount = int.tryParse(value ?? '');
+    if (amount == null || amount < 20 || amount > 99999) {
+      return 'ระบุจำนวนเงินตั้งแต่ 20 ถึง 99,999 บาท';
     }
-    return 0.0;
+    return null;
   }
 
-  String _formatCurrency(num value) {
-    return value.toStringAsFixed(2).replaceAllMapped(
-          RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
-          (Match m) => '${m[1]},',
-        );
-  }
-
-  String _formatInteger(int value) {
-    return value.toString().replaceAllMapped(
-          RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
-          (Match m) => '${m[1]},',
-        );
-  }
-
-  void _handleConfirmPayment(BuildContext context, double currentBalance) {
-    if (!_formKey.currentState!.validate()) {
-      AppSnackBar.showWarning(context, 'กรุณากรอกจำนวนเงินให้ถูกต้อง');
-      return;
-    }
-
-    final amount = _getFinalAmount();
-    if (amount <= 0) {
-      AppSnackBar.showWarning(context, 'กรุณาระบุจำนวนเงินที่ต้องการเติม');
-      return;
-    }
-
-    _showQrCodeDialog(context, currentBalance, amount);
-  }
-
-  void _showQrCodeDialog(BuildContext context, double currentBalance, double amount) {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (BuildContext dialogContext) {
-        return Dialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          elevation: 10,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Header
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
-                decoration: const BoxDecoration(
-                  color: Color(0xFF0F3D8A), // PromptPay Blue
-                  borderRadius: BorderRadius.only(
-                    topLeft: Radius.circular(20),
-                    topRight: Radius.circular(20),
-                  ),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: const [
-                    Icon(
-                      Icons.qr_code_scanner,
-                      color: Colors.white,
-                      size: 24,
-                    ),
-                    SizedBox(width: 8),
-                    Text(
-                      'Thai QR Payment',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              // Body
-              Padding(
-                padding: const EdgeInsets.all(20.0),
-                child: Column(
-                  children: [
-                    // PromptPay text/mini logo
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Text(
-                          'พร้อมเพย์',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                            color: Color(0xFF0F3D8A),
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF00ADB5),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: const Text(
-                            'PromptPay',
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    // Fake QR Code box
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: Colors.grey[200]!,
-                          width: 2,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.05),
-                            blurRadius: 10,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: const Icon(
-                        Icons.qr_code_2_rounded,
-                        size: 200,
-                        color: Color(0xFF0F172A),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    // Name
-                    const Text(
-                      'บริษัท เซฟซีท จำกัด (SafeSeat Co., Ltd.)',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF1E293B),
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Ref No. TXN${DateTime.now().millisecondsSinceEpoch.toString().substring(5)}',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey[600],
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    const Divider(),
-                    const SizedBox(height: 8),
-                    // Amount
-                    const Text(
-                      'จำนวนเงินที่ต้องชำระ',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Color(0xFF64748B),
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.baseline,
-                      textBaseline: TextBaseline.alphabetic,
-                      children: [
-                        Text(
-                          '฿${_formatCurrency(amount)}',
-                          style: const TextStyle(
-                            fontSize: 28,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF0F3D8A),
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        const Text(
-                          'บาท',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF64748B),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 20),
-                    // Action Buttons
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton(
-                            style: OutlinedButton.styleFrom(
-                              side: const BorderSide(color: Color(0xFF64748B)),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                            ),
-                            onPressed: () {
-                              Navigator.of(dialogContext).pop();
-                            },
-                            child: const Text(
-                              'ยกเลิก',
-                              style: TextStyle(
-                                color: Color(0xFF64748B),
-                                fontSize: 15,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppTheme.primaryColor,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                            ),
-                            onPressed: () {
-                              Navigator.of(dialogContext).pop();
-                              _executeTopUp(context, currentBalance, amount);
-                            },
-                            child: const Text(
-                              'ยืนยันการโอนเงิน',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 15,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Future<void> _executeTopUp(BuildContext context, double currentBalance, double amount) async {
+  Future<void> _submit() async {
+    if (_submitting || !(_formKey.currentState?.validate() ?? false)) return;
     final user = ref.read(userProvider);
     if (user == null) return;
-
-    // Show standardized loading dialog
-    AppDialog.showLoading(context, message: 'กำลังดำเนินการเติมเงิน...');
-
-    try {
-      final success = await ref
-          .read(profileControllerProvider.notifier)
-          .topUpWallet(user.phoneNo, amount);
-
-      if (!context.mounted) return;
-      AppDialog.hideLoading(context);
-
-      if (success) {
-        // Show Standard Success Dialog
-        AppDialog.showSuccess(
-          context: context,
-          title: 'เติมเงินสำเร็จ',
-          message: 'เติมเงินจำนวน ฿${_formatCurrency(amount)} บาท เข้ากระเป๋า SafeSeat Wallet เรียบร้อยแล้ว',
-          buttonText: 'ตกลง',
-          onDismiss: () {
-            if (mounted) {
-              setState(() {
-                _customAmountController.text = '200';
-              });
-            }
-          },
-        );
-      } else {
-        if (context.mounted) {
-          AppSnackBar.showError(context, 'เกิดข้อผิดพลาดในการบันทึกยอดเงินลงเซิร์ฟเวอร์');
-        }
-      }
-    } catch (e) {
-      if (context.mounted) {
-        AppDialog.hideLoading(context);
-        AppSnackBar.showError(context, 'เกิดข้อผิดพลาด: $e');
-      }
+    final amount = int.parse(_amountController.text);
+    _amountFocus.unfocus();
+    setState(() => _submitting = true);
+    final success = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      isDismissible: false,
+      enableDrag: false,
+      backgroundColor: Colors.transparent,
+      builder: (_) => TopUpQrSheet(
+        amount: amount,
+        onConfirm: () => ref
+            .read(profileControllerProvider.notifier)
+            .topUpWallet(user.phoneNo, amount.toDouble()),
+      ),
+    );
+    if (!mounted) return;
+    setState(() => _submitting = false);
+    if (success == true) {
+      AppSnackBar.showSuccess(
+        context,
+        'เติมเงิน ฿${_formatAmount(amount)} สำเร็จ',
+      );
     }
   }
 
@@ -357,623 +94,464 @@ class _WalletScreenState extends ConsumerState<WalletScreen> {
   Widget build(BuildContext context) {
     final user = ref.watch(userProvider);
     if (user == null) {
-      return const Scaffold(
-        body: Center(
-          child: CircularProgressIndicator(),
-        ),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
-
-    final double balance = (user.walletBalance).toDouble();
+    final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Color(0xFF0F172A)),
-          onPressed: () {
-            if (widget.onBackToHome != null) {
-              widget.onBackToHome!();
-            } else if (Navigator.canPop(context)) {
-              Navigator.pop(context);
-            }
-          },
-        ),
-        title: const Text(
-          'เติมเงิน (SafeSeat Wallet)',
-          style: TextStyle(
-            color: Color(0xFF0F172A),
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
+        title: const Text('กระเป๋าเงิน'),
+        automaticallyImplyLeading: widget.onBackToHome == null,
+        leading: widget.onBackToHome == null
+            ? null
+            : IconButton(
+                tooltip: 'กลับหน้าแรก',
+                icon: const Icon(Icons.arrow_back_rounded),
+                onPressed: widget.onBackToHome,
+              ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh_rounded, color: Color(0xFF475569)),
-            tooltip: 'รีเฟรชยอดเงิน',
-            onPressed: () {
-              final currentUser = ref.read(userProvider);
-              if (currentUser != null) {
-                ref
-                    .read(profileControllerProvider.notifier)
-                    .getUserProfile(currentUser.phoneNo);
-                AppSnackBar.showSuccess(context, 'อัปเดตยอดคงเหลือล่าสุดเรียบร้อยแล้ว');
-              }
-            },
+            tooltip: 'อัปเดตยอดคงเหลือ',
+            onPressed: _refreshing ? null : _refreshBalance,
+            icon: _refreshing
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.refresh_rounded),
           ),
-          const SizedBox(width: 6),
         ],
-        centerTitle: false,
       ),
       body: SafeArea(
-        child: Column(
-          children: [
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Wallet Balance Card
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(22),
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [
-                            Color(0xFF0D47A1), // Deep Navy Blue
-                            Color(0xFF1565C0), // Royal Blue
-                            Color(0xFF1976D2), // Bright Blue
-                          ],
-                        ),
-                        borderRadius: BorderRadius.circular(22),
-                        boxShadow: [
-                          BoxShadow(
-                            color: const Color(0xFF0D47A1).withValues(alpha: 0.35),
-                            blurRadius: 18,
-                            offset: const Offset(0, 8),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 640),
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(22),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [AppTheme.primaryDark, AppTheme.primaryColor],
+                    ),
+                    borderRadius: BorderRadius.circular(22),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            width: 38,
+                            height: 38,
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.16),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Icon(
+                              Icons.account_balance_wallet_outlined,
+                              color: Colors.white,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          const Expanded(
+                            child: Text(
+                              'ยอดคงเหลือ',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
                           ),
                         ],
                       ),
-                      child: Stack(
-                        children: [
-                          Positioned(
-                            right: -25,
-                            top: -25,
-                            child: Container(
-                              width: 110,
-                              height: 110,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: Colors.white.withValues(alpha: 0.07),
-                              ),
+                      const SizedBox(height: 20),
+                      SizedBox(
+                        width: double.infinity,
+                        child: FittedBox(
+                          alignment: Alignment.centerLeft,
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            '฿ ${_formatAmount(user.walletBalance)}',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 34,
+                              fontWeight: FontWeight.w700,
                             ),
                           ),
-                          Positioned(
-                            right: 45,
-                            bottom: -35,
-                            child: Container(
-                              width: 90,
-                              height: 90,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: Colors.white.withValues(alpha: 0.05),
-                              ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'กระเป๋าเงิน SafeSeat',
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.78),
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 28),
+                const Text(
+                  'เลือกจำนวนเงิน',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: _amounts.map((amount) {
+                    final selected = _amountController.text == '$amount';
+                    return ChoiceChip(
+                      label: Text('${amount.toString()} บาท'),
+                      selected: selected,
+                      onSelected: (_) {
+                        setState(() => _amountController.text = '$amount');
+                        _amountFocus.unfocus();
+                        _formKey.currentState?.validate();
+                      },
+                      selectedColor: AppTheme.primaryColor.withValues(
+                        alpha: 0.10,
+                      ),
+                      backgroundColor: AppTheme.surfaceColor,
+                      side: BorderSide(
+                        color: selected
+                            ? AppTheme.primaryColor
+                            : AppTheme.borderColor,
+                      ),
+                      labelStyle: TextStyle(
+                        color: selected
+                            ? AppTheme.primaryColor
+                            : AppTheme.textPrimary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: 24),
+                const Text(
+                  'หรือระบุจำนวนเงิน',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Form(
+                  key: _formKey,
+                  child: TextFormField(
+                    controller: _amountController,
+                    focusNode: _amountFocus,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(5),
+                    ],
+                    validator: _validateAmount,
+                    onChanged: (_) => setState(() {}),
+                    decoration: const InputDecoration(
+                      hintText: 'ขั้นต่ำ 20 บาท',
+                      prefixIcon: Icon(Icons.payments_outlined),
+                      suffixText: 'บาท',
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+      bottomNavigationBar: keyboardOpen
+          ? null
+          : SafeArea(
+              top: false,
+              child: Container(
+                color: AppTheme.surfaceColor,
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+                child: Center(
+                  heightFactor: 1,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 600),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              'จำนวนเงิน',
+                              style: TextStyle(color: AppTheme.textSecondary),
                             ),
-                          ),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Container(
-                                        padding: const EdgeInsets.all(6),
-                                        decoration: BoxDecoration(
-                                          color: Colors.white.withValues(alpha: 0.16),
-                                          shape: BoxShape.circle,
-                                        ),
-                                        child: const Icon(
-                                          Icons.account_balance_wallet_rounded,
-                                          color: Colors.white,
-                                          size: 18,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      const Text(
-                                        'ยอดคงเหลือในกระเป๋า',
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 10,
-                                      vertical: 4,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white.withValues(alpha: 0.18),
-                                      borderRadius: BorderRadius.circular(20),
-                                      border: Border.all(
-                                        color: Colors.white.withValues(alpha: 0.25),
-                                        width: 0.8,
-                                      ),
-                                    ),
-                                    child: const Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(
-                                          Icons.shield_outlined,
-                                          color: Color(0xFF6EE7B7),
-                                          size: 13,
-                                        ),
-                                        SizedBox(width: 4),
-                                        Text(
-                                          'SafeSeat Wallet',
-                                          style: TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 18),
-                              Row(
-                                crossAxisAlignment: CrossAxisAlignment.baseline,
-                                textBaseline: TextBaseline.alphabetic,
-                                children: [
-                                  Text(
-                                    '฿ ${_formatCurrency(balance)}',
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 34,
-                                      fontWeight: FontWeight.bold,
-                                      letterSpacing: 0.5,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  const Text(
-                                    'บาท',
-                                    style: TextStyle(
-                                      color: Colors.white70,
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 12),
-                              Text(
-                                'ยอดเงินพร้อมใช้งานสำหรับชำระค่าบริการคนขับและค่าเดินทาง',
-                                style: TextStyle(
-                                  color: Colors.white.withValues(alpha: 0.8),
-                                  fontSize: 12,
+                            Flexible(
+                              child: Text(
+                                '฿ ${_formatAmount(int.tryParse(_amountController.text) ?? 0)}',
+                                textAlign: TextAlign.end,
+                                style: const TextStyle(
+                                  color: AppTheme.primaryColor,
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.w700,
                                 ),
                               ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-
-                    // Predefined Amounts Header
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'เลือกจำนวนเงินเติมด่วน',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF0F172A),
-                          ),
+                            ),
+                          ],
                         ),
-                        Text(
-                          'หน่วย: บาท',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                            color: Colors.grey[500],
+                        const SizedBox(height: 10),
+                        SizedBox(
+                          width: double.infinity,
+                          height: 52,
+                          child: FilledButton(
+                            onPressed: _submitting ? null : _submit,
+                            child: _submitting
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      color: Colors.white,
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Text('ต่อไป'),
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 12),
+                  ),
+                ),
+              ),
+            ),
+    );
+  }
+}
 
-                    // Predefined Amounts Grid (Interactive highlighting with Thai 'บาท')
-                    GridView.builder(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: _predefinedAmounts.length,
-                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 3,
-                        childAspectRatio: 1.75,
-                        crossAxisSpacing: 10,
-                        mainAxisSpacing: 10,
+/// Confirmation step for an in-app balance top-up. The pattern is decorative:
+/// it does not encode a payment address or a scannable QR payload.
+class TopUpQrSheet extends StatefulWidget {
+  final int amount;
+  final Future<bool> Function() onConfirm;
+
+  const TopUpQrSheet({
+    super.key,
+    required this.amount,
+    required this.onConfirm,
+  });
+
+  @override
+  State<TopUpQrSheet> createState() => _TopUpQrSheetState();
+}
+
+class _TopUpQrSheetState extends State<TopUpQrSheet> {
+  bool _processing = false;
+
+  Future<void> _confirm() async {
+    if (_processing) return;
+    setState(() => _processing = true);
+    bool success;
+    try {
+      success = await widget.onConfirm();
+    } catch (_) {
+      success = false;
+    }
+    if (!mounted) return;
+    if (success) {
+      Navigator.of(context).pop(true);
+    } else {
+      setState(() => _processing = false);
+      AppSnackBar.showError(context, 'เติมเงินไม่สำเร็จ กรุณาลองอีกครั้ง');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final amount = widget.amount
+        .toStringAsFixed(2)
+        .replaceAllMapped(
+          RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+          (match) => '${match[1]},',
+        );
+
+    return PopScope(
+      canPop: !_processing,
+      child: SafeArea(
+        top: false,
+        child: Center(
+          heightFactor: 1,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: 480,
+              maxHeight: MediaQuery.sizeOf(context).height * 0.9,
+            ),
+            child: Material(
+              color: AppTheme.surfaceColor,
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(28),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      'เติมเงิน',
+                      style: TextStyle(
+                        color: AppTheme.textPrimary,
+                        fontSize: 21,
+                        fontWeight: FontWeight.w700,
                       ),
-                      itemBuilder: (context, index) {
-                        final amount = _predefinedAmounts[index];
-                        final isSelected = _customAmountController.text == amount.toString();
-                        return InkWell(
-                          onTap: () => _selectPredefinedAmount(amount),
-                          borderRadius: BorderRadius.circular(14),
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 180),
-                            decoration: BoxDecoration(
-                              color: isSelected
-                                  ? AppTheme.primaryColor.withValues(alpha: 0.08)
-                                  : Colors.white,
-                              borderRadius: BorderRadius.circular(14),
-                              border: Border.all(
-                                color: isSelected
-                                    ? AppTheme.primaryColor
-                                    : const Color(0xFFE2E8F0),
-                                width: isSelected ? 2.0 : 1.0,
+                    ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      'กระเป๋าเงิน SafeSeat',
+                      style: TextStyle(color: AppTheme.textSecondary),
+                    ),
+                    const SizedBox(height: 20),
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(18),
+                        border: Border.all(color: AppTheme.borderColor),
+                      ),
+                      child: const SizedBox.square(
+                        dimension: 192,
+                        child: Stack(
+                          children: [
+                            Positioned.fill(
+                              child: CustomPaint(
+                                painter: _SafeSeatCodePainter(),
                               ),
-                              boxShadow: isSelected
-                                  ? [
-                                      BoxShadow(
-                                        color: AppTheme.primaryColor.withValues(alpha: 0.15),
-                                        blurRadius: 8,
-                                        offset: const Offset(0, 2),
-                                      ),
-                                    ]
-                                  : null,
                             ),
-                            child: Stack(
-                              children: [
-                                if (isSelected)
-                                  const Positioned(
-                                    top: 4,
-                                    right: 4,
-                                    child: Icon(
-                                      Icons.check_circle_rounded,
-                                      size: 14,
-                                      color: AppTheme.primaryColor,
-                                    ),
-                                  ),
-                                Center(
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Text(
-                                        _formatInteger(amount),
-                                        style: TextStyle(
-                                          fontSize: 17,
-                                          fontWeight: FontWeight.bold,
-                                          color: isSelected
-                                              ? AppTheme.primaryColor
-                                              : const Color(0xFF1E293B),
-                                        ),
-                                      ),
-                                      const SizedBox(height: 1),
-                                      Text(
-                                        'บาท',
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w500,
-                                          color: isSelected
-                                              ? AppTheme.primaryColor
-                                              : const Color(0xFF64748B),
-                                        ),
-                                      ),
-                                    ],
+                            Center(
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.all(
+                                    Radius.circular(10),
                                   ),
                                 ),
-                              ],
+                                child: Padding(
+                                  padding: EdgeInsets.all(7),
+                                  child: Icon(
+                                    Icons.directions_car_filled_rounded,
+                                    color: AppTheme.primaryColor,
+                                    size: 32,
+                                  ),
+                                ),
+                              ),
                             ),
-                          ),
-                        );
-                      },
+                          ],
+                        ),
+                      ),
                     ),
                     const SizedBox(height: 18),
-
-                    // Custom Amount Header & TextField
                     const Text(
-                      'หรือระบุจำนวนเงินเอง (บาท)',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF475569),
+                      'จำนวนเงินที่เติม',
+                      style: TextStyle(color: AppTheme.textSecondary),
+                    ),
+                    const SizedBox(height: 3),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        '฿ $amount',
+                        style: const TextStyle(
+                          color: AppTheme.primaryColor,
+                          fontSize: 30,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                     ),
                     const SizedBox(height: 8),
-                    Form(
-                      key: _formKey,
-                      child: TextFormField(
-                        controller: _customAmountController,
-                        focusNode: _customAmountFocusNode,
-                        keyboardType: TextInputType.number,
-                        inputFormatters: [
-                          FilteringTextInputFormatter.digitsOnly,
-                          LengthLimitingTextInputFormatter(5),
-                        ],
-                        validator: AppValidators.validateAmount,
-                        onChanged: (val) {
-                          setState(() {});
-                        },
-                        decoration: InputDecoration(
-                          hintText: 'ระบุจำนวนเงิน (ขั้นต่ำ 20)',
-                          hintStyle: const TextStyle(
-                            color: Color(0xFF94A3B8),
-                            fontSize: 15,
-                            fontWeight: FontWeight.normal,
-                          ),
-                          prefixIcon: const Icon(
-                            Icons.edit_note_rounded,
-                            color: Color(0xFF64748B),
-                          ),
-                          suffixIcon: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                            child: const Text(
-                              'บาท',
-                              style: TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.bold,
-                                color: AppTheme.primaryColor,
-                              ),
-                            ),
-                          ),
-                          fillColor: Colors.white,
-                          filled: true,
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 14,
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(14),
-                            borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(14),
-                            borderSide: const BorderSide(
-                              color: AppTheme.primaryColor,
-                              width: 1.8,
-                            ),
-                          ),
-                          errorBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(14),
-                            borderSide: const BorderSide(color: Colors.red),
-                          ),
-                          focusedErrorBorder: const OutlineInputBorder(
-                            borderRadius: BorderRadius.all(Radius.circular(14)),
-                            borderSide: BorderSide(color: Colors.red, width: 1.8),
-                          ),
-                        ),
-                        style: const TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF0F172A),
-                        ),
-                      ),
+                    const Text(
+                      'ตรวจสอบจำนวนเงินก่อนยืนยัน',
+                      style: TextStyle(color: AppTheme.textSecondary),
                     ),
                     const SizedBox(height: 22),
-
-                    // Payment Method Header
-                    const Text(
-                      'ช่องทางการชำระเงิน',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF0F172A),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-
-                    // Payment Method Card (PromptPay selected)
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: AppTheme.primaryColor.withValues(alpha: 0.6),
-                          width: 1.5,
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: _processing
+                                ? null
+                                : () => Navigator.of(context).pop(false),
+                            child: const Text('ยกเลิก'),
+                          ),
                         ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.03),
-                            blurRadius: 8,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 46,
-                            height: 46,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF0F3D8A).withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: const Center(
-                              child: Icon(
-                                Icons.qr_code_2_rounded,
-                                color: Color(0xFF0F3D8A),
-                                size: 28,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 14),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    const Text(
-                                      'พร้อมเพย์ (PromptPay QR)',
-                                      style: TextStyle(
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.bold,
-                                        color: Color(0xFF0F172A),
-                                      ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          flex: 2,
+                          child: FilledButton(
+                            onPressed: _processing ? null : _confirm,
+                            child: _processing
+                                ? const SizedBox.square(
+                                    dimension: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white,
                                     ),
-                                    const SizedBox(width: 6),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFFECFDF5),
-                                        borderRadius: BorderRadius.circular(6),
-                                      ),
-                                      child: const Text(
-                                        'ฟรีค่าธรรมเนียม',
-                                        style: TextStyle(
-                                          color: Color(0xFF059669),
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 4),
-                                const Text(
-                                  'สแกนจ่ายได้ทันทีผ่านทุกแอปพลิเคชันธนาคาร',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: Color(0xFF64748B),
-                                  ),
-                                ),
-                              ],
-                            ),
+                                  )
+                                : const Text('ยืนยันเติมเงิน'),
                           ),
-                          const Icon(
-                            Icons.check_circle_rounded,
-                            color: AppTheme.primaryColor,
-                            size: 24,
-                          ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
               ),
             ),
-            // Bottom Action Area
-            Container(
-              padding: const EdgeInsets.fromLTRB(20.0, 14.0, 20.0, 16.0),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(20),
-                  topRight: Radius.circular(20),
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.06),
-                    blurRadius: 14,
-                    offset: const Offset(0, -4),
-                  ),
-                ],
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'ยอดชำระสุทธิ',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF64748B),
-                        ),
-                      ),
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.baseline,
-                        textBaseline: TextBaseline.alphabetic,
-                        children: [
-                          Text(
-                            '฿ ${_formatCurrency(_getFinalAmount())}',
-                            style: const TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.bold,
-                              color: AppTheme.primaryColor,
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          const Text(
-                            'บาท',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF64748B),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 52,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.primaryColor,
-                        foregroundColor: Colors.white,
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                      ),
-                      onPressed: () => _handleConfirmPayment(context, balance),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: const [
-                          Icon(Icons.qr_code_scanner_rounded, size: 20),
-                          SizedBox(width: 8),
-                          Text(
-                            'สร้าง QR Code เติมเงิน',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.lock_outline, size: 12, color: Color(0xFF94A3B8)),
-                      SizedBox(width: 4),
-                      Text(
-                        'ระบบชำระเงินปลอดภัย ผ่านมาตรฐาน SafeSeat Pay',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: Color(0xFF94A3B8),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
   }
+}
+
+class _SafeSeatCodePainter extends CustomPainter {
+  const _SafeSeatCodePainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const cells = 27;
+    final cell = size.shortestSide / cells;
+    final paint = Paint()..color = AppTheme.primaryDark;
+    for (var row = 0; row < cells; row++) {
+      for (var column = 0; column < cells; column++) {
+        if (row >= 9 && row <= 17 && column >= 9 && column <= 17) {
+          continue;
+        }
+        // A fixed mosaic without QR finder patterns or encoded data.
+        final visible = (row * 37 + column * 73 + row * column * 11) % 9 < 4;
+        if (!visible) continue;
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(
+            Rect.fromLTWH(
+              column * cell + cell * 0.1,
+              row * cell + cell * 0.1,
+              cell * 0.8,
+              cell * 0.8,
+            ),
+            Radius.circular(cell * 0.2),
+          ),
+          paint,
+        );
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

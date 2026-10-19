@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:safeseat_mini/core/controllers/user_controller.dart';
 import 'package:safeseat_mini/core/theme/app_theme.dart';
 import 'package:safeseat_mini/core/utils/app_feedback.dart';
-import 'package:safeseat_mini/features/profile/edit_profile_screen.dart';
-import 'package:safeseat_mini/core/controllers/user_controller.dart';
-import 'package:safeseat_mini/features/profile/wallet_screen.dart';
 import 'package:safeseat_mini/features/auth/login_screen.dart';
+import 'package:safeseat_mini/features/profile/edit_profile_screen.dart';
+import 'package:safeseat_mini/features/profile/wallet_screen.dart';
 
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
@@ -13,433 +13,231 @@ class ProfileScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(userProvider);
+    if (user == null) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
 
-    if (user == null) return const Center(child: CircularProgressIndicator());
-
-    final String? profileImagePath = user.profileImagePath;
-    final String name = user.name.isNotEmpty ? user.name : 'ผู้ใช้งาน';
-    final String walletBalance = user.walletBalance.toStringAsFixed(2);
+    final name = user.name.trim().isEmpty ? 'ผู้ใช้งาน' : user.name.trim();
+    final imagePath = user.profileImagePath;
+    final homeName = user.homeDisplayName?.trim();
+    final hasHome = homeName != null && homeName.isNotEmpty;
+    void openEditProfile() => Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const EditProfileScreen()));
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        centerTitle: true,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Color(0xFF1E293B)),
-          onPressed: () {},
-        ),
-        title: const Text(
-          'โปรไฟล์',
-          style: TextStyle(
-            color: Color(0xFF1E293B),
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {},
-            child: const Text(
-              'shield',
-              style: TextStyle(
-                color: AppTheme.primaryColor,
-                fontSize: 16,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-        ],
+        title: const Text('โปรไฟล์'),
+        automaticallyImplyLeading: false,
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // User Card
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.grey.withValues(alpha: 0.2)),
-              ),
-              child: Row(
-                children: [
-                  CircleAvatar(
-                    radius: 36,
-                    backgroundColor: Colors.grey[200],
-                    backgroundImage:
-                        profileImagePath != null && profileImagePath.isNotEmpty
-                        ? NetworkImage(profileImagePath)
-                        : null,
-                    child:
-                        (profileImagePath == null || profileImagePath.isEmpty)
-                        ? const Icon(Icons.person, size: 40, color: Colors.grey)
-                        : null,
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          name,
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF1E293B),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        InkWell(
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const EditProfileScreen(),
-                              ),
-                            );
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 6,
-                            ),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF334155),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: const Text(
-                              'แก้ไขโปรไฟล์',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
-
-            // Wallet Section
-            Row(
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 640),
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
               children: [
-                Expanded(
-                  child: InkWell(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const WalletScreen(),
+                _Surface(
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 34,
+                        backgroundColor: AppTheme.primaryColor.withValues(
+                          alpha: 0.10,
                         ),
-                      );
-                    },
-                    borderRadius: BorderRadius.circular(16),
-                    child: Container(
-                      padding: const EdgeInsets.all(16),
-                      height: 140,
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: Colors.grey.withValues(alpha: 0.2),
+                        backgroundImage:
+                            imagePath != null && imagePath.isNotEmpty
+                            ? NetworkImage(imagePath)
+                            : null,
+                        child: imagePath == null || imagePath.isEmpty
+                            ? const Icon(
+                                Icons.person_rounded,
+                                size: 38,
+                                color: AppTheme.primaryColor,
+                              )
+                            : null,
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              name,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.w700,
+                                color: AppTheme.textPrimary,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              user.phoneNo,
+                              style: const TextStyle(
+                                fontSize: 13,
+                                color: AppTheme.textSecondary,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                _ActionTile(
+                  icon: Icons.edit_outlined,
+                  title: 'แก้ไขข้อมูลส่วนตัว',
+                  subtitle: 'ชื่อ อีเมล รูปภาพ และยานพาหนะ',
+                  onTap: openEditProfile,
+                ),
+                const SizedBox(height: 28),
+                const _SectionHeading('กระเป๋าเงิน'),
+                const SizedBox(height: 12),
+                _Surface(
+                  padding: EdgeInsets.zero,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(20),
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const WalletScreen()),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(20),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: AppTheme.primaryColor.withValues(alpha: 0.1),
-                              shape: BoxShape.circle,
+                          const Row(
+                            children: [
+                              _IconBadge(Icons.account_balance_wallet_outlined),
+                              SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  'SafeSeat Wallet',
+                                  style: TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppTheme.textPrimary,
+                                  ),
+                                ),
+                              ),
+                              Icon(
+                                Icons.arrow_forward_ios_rounded,
+                                size: 16,
+                                color: AppTheme.textSecondary,
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 18),
+                          const Text(
+                            'ยอดคงเหลือ',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: AppTheme.textSecondary,
                             ),
-                            child: const Icon(
-                              Icons.account_balance_wallet,
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            '฿ ${user.walletBalance.toStringAsFixed(2)}',
+                            style: const TextStyle(
+                              fontSize: 28,
+                              fontWeight: FontWeight.w700,
                               color: AppTheme.primaryColor,
                             ),
                           ),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'SafeSeat Wallet',
-                                style: TextStyle(
-                                  color: Color(0xFF64748B),
-                                  fontSize: 12,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                '฿ $walletBalance',
-                                style: const TextStyle(
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFF1E293B),
-                                ),
-                              ),
-                            ],
+                          const SizedBox(height: 8),
+                          const Text(
+                            'ดูยอดเงินและเติมเงิน',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: AppTheme.textSecondary,
+                            ),
                           ),
                         ],
                       ),
                     ),
                   ),
                 ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: InkWell(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const WalletScreen(),
-                        ),
-                      );
-                    },
-                    borderRadius: BorderRadius.circular(16),
-                    child: Container(
-                      padding: const EdgeInsets.all(16),
-                      height: 140,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFE2E8F0),
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: AppTheme.primaryColor.withValues(alpha: 0.2),
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(
-                              Icons.add,
-                              color: AppTheme.primaryColor,
-                            ),
-                          ),
-                          const Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'เติมเงิน',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFF1E293B),
-                                ),
+                const SizedBox(height: 28),
+                const _SectionHeading('สถานที่บันทึก'),
+                const SizedBox(height: 12),
+                _Surface(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const _IconBadge(Icons.home_outlined),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'บ้าน',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                                color: AppTheme.textPrimary,
                               ),
-                              Text(
-                                'SafeSeat Wallet',
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              hasHome ? homeName : 'ยังไม่ได้ระบุที่อยู่บ้าน',
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 13,
+                                color: AppTheme.textSecondary,
+                              ),
+                            ),
+                            if (user.homeLatLng != null) ...[
+                              const SizedBox(height: 4),
+                              const Text(
+                                'บันทึกพิกัดแล้ว',
                                 style: TextStyle(
-                                  color: Color(0xFF1E293B),
                                   fontSize: 12,
+                                  color: AppTheme.successColor,
                                 ),
                               ),
                             ],
-                          ),
-                        ],
+                          ],
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: openEditProfile,
+                        child: Text(hasHome ? 'แก้ไข' : 'ตั้งค่า'),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 32),
+                SizedBox(
+                  height: 52,
+                  child: OutlinedButton.icon(
+                    onPressed: () => _showLogoutDialog(context, ref),
+                    icon: const Icon(Icons.logout_rounded),
+                    label: const Text('ออกจากระบบ'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppTheme.errorColor,
+                      side: BorderSide(
+                        color: AppTheme.errorColor.withValues(alpha: 0.45),
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
                       ),
                     ),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 24),
-
-            // Saved Home Address Card
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.grey.withValues(alpha: 0.2)),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: AppTheme.primaryColor.withValues(alpha: 0.1),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.home_outlined,
-                      color: AppTheme.primaryColor,
-                      size: 24,
-                    ),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'ที่อยู่ตั้งต้น / บ้าน',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Color(0xFF64748B),
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(height: 3),
-                        Text(
-                          user.homeDisplayName != null && user.homeDisplayName!.trim().isNotEmpty
-                              ? user.homeDisplayName!
-                              : 'ยังไม่ได้ระบุที่อยู่บ้าน',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                            color: user.homeDisplayName != null && user.homeDisplayName!.trim().isNotEmpty
-                                ? const Color(0xFF1E293B)
-                                : const Color(0xFF94A3B8),
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        if (user.homeLatLng != null)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 2.0),
-                            child: Text(
-                              '📍 พิกัดแม่นยำ: ${user.homeLatitude!.toStringAsFixed(4)}, ${user.homeLongitude!.toStringAsFixed(4)}',
-                              style: const TextStyle(
-                                fontSize: 11,
-                                color: Color(0xFF0F766E),
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const EditProfileScreen(),
-                        ),
-                      );
-                    },
-                    child: Text(
-                      user.homeDisplayName != null && user.homeDisplayName!.trim().isNotEmpty ? 'แก้ไข' : 'ตั้งค่า',
-                      style: const TextStyle(
-                        color: AppTheme.primaryColor,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 28),
-
-            // General Menu
-            const Text(
-              'ทั่วไป',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF475569),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.grey.withValues(alpha: 0.2)),
-              ),
-              child: Column(
-                children: [
-                  _buildMenuItem(Icons.settings_outlined, 'การตั้งค่า'),
-                  const Divider(height: 1, color: Color(0xFFF1F5F9)),
-                  _buildMenuItem(Icons.payments_outlined, 'วิธีการชำระเงิน'),
-                  const Divider(height: 1, color: Color(0xFFF1F5F9)),
-                  _buildMenuItem(Icons.language_outlined, 'ภาษา'),
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
-
-            // Help Menu
-            const Text(
-              'ความช่วยเหลือ',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF475569),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.grey.withValues(alpha: 0.2)),
-              ),
-              child: Column(
-                children: [
-                  _buildMenuItem(Icons.help_outline, 'ศูนย์ช่วยเหลือ'),
-                  const Divider(height: 1, color: Color(0xFFF1F5F9)),
-                  _buildMenuItem(
-                    Icons.chat_bubble_outline,
-                    'แชร์ความคิดเห็น และข้อเสนอแนะ',
-                  ),
-                  const Divider(height: 1, color: Color(0xFFF1F5F9)),
-                  _buildMenuItem(
-                    Icons.directions_car_outlined,
-                    'สมัคร Driver SafeSeat',
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-
-            // Logout Button
-            SizedBox(
-              width: double.infinity,
-              height: 52,
-              child: OutlinedButton.icon(
-                onPressed: () => _showLogoutDialog(context, ref),
-                icon: const Icon(Icons.logout, color: Colors.red, size: 20),
-                label: const Text(
-                  'ออกจากระบบ',
-                  style: TextStyle(
-                    color: Colors.red,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: Color(0xFFFCA5A5)),
-                  backgroundColor: const Color(0xFFFEF2F2),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 32),
-          ],
+          ),
         ),
       ),
     );
   }
 
-  void _showLogoutDialog(BuildContext context, WidgetRef ref) async {
+  Future<void> _showLogoutDialog(BuildContext context, WidgetRef ref) async {
     final confirmed = await AppDialog.showConfirm(
       context: context,
       title: 'ออกจากระบบ',
@@ -448,31 +246,122 @@ class ProfileScreen extends ConsumerWidget {
       cancelText: 'ยกเลิก',
       isDestructive: true,
       icon: Icons.logout_rounded,
-      iconColor: const Color(0xFFEF4444),
+      iconColor: AppTheme.errorColor,
     );
-
-    if (confirmed == true && context.mounted) {
-      ref.read(userProvider.notifier).clearUser();
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (context) => const LoginScreen()),
-        (route) => false,
-      );
-      AppSnackBar.showInfo(context, 'ออกจากระบบเรียบร้อยแล้ว');
-    }
+    if (confirmed != true || !context.mounted) return;
+    ref.read(userProvider.notifier).clearUser();
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
+      (_) => false,
+    );
   }
+}
 
-  Widget _buildMenuItem(IconData icon, String title) {
-    return ListTile(
-      leading: Icon(icon, color: AppTheme.primaryColor),
-      title: Text(
-        title,
-        style: const TextStyle(
-          color: Color(0xFF1E293B),
-          fontWeight: FontWeight.w500,
+class _SectionHeading extends StatelessWidget {
+  final String title;
+  const _SectionHeading(this.title);
+  @override
+  Widget build(BuildContext context) => Text(
+    title,
+    style: const TextStyle(
+      fontSize: 18,
+      fontWeight: FontWeight.w700,
+      color: AppTheme.textPrimary,
+    ),
+  );
+}
+
+class _Surface extends StatelessWidget {
+  final Widget child;
+  final EdgeInsetsGeometry padding;
+  const _Surface({
+    required this.child,
+    this.padding = const EdgeInsets.all(18),
+  });
+  @override
+  Widget build(BuildContext context) => Material(
+    color: AppTheme.surfaceColor,
+    borderRadius: BorderRadius.circular(20),
+    child: Container(
+      padding: padding,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppTheme.borderColor),
+      ),
+      child: child,
+    ),
+  );
+}
+
+class _IconBadge extends StatelessWidget {
+  final IconData icon;
+  const _IconBadge(this.icon);
+  @override
+  Widget build(BuildContext context) => Container(
+    width: 42,
+    height: 42,
+    decoration: BoxDecoration(
+      color: AppTheme.primaryColor.withValues(alpha: 0.09),
+      borderRadius: BorderRadius.circular(13),
+    ),
+    child: Icon(icon, color: AppTheme.primaryColor, size: 22),
+  );
+}
+
+class _ActionTile extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+  const _ActionTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+  @override
+  Widget build(BuildContext context) => _Surface(
+    padding: EdgeInsets.zero,
+    child: InkWell(
+      borderRadius: BorderRadius.circular(20),
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            _IconBadge(icon),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppTheme.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(
+              Icons.arrow_forward_ios_rounded,
+              size: 16,
+              color: AppTheme.textSecondary,
+            ),
+          ],
         ),
       ),
-      trailing: const Icon(Icons.chevron_right, color: Color(0xFF94A3B8)),
-      onTap: () {},
-    );
-  }
+    ),
+  );
 }

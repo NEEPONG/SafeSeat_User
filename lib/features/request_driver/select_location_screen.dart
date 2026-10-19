@@ -24,86 +24,60 @@ class SelectLocationScreen extends ConsumerStatefulWidget {
   });
 
   @override
-  ConsumerState<SelectLocationScreen> createState() => _SelectLocationScreenState();
+  ConsumerState<SelectLocationScreen> createState() =>
+      _SelectLocationScreenState();
 }
 
 class _SelectLocationScreenState extends ConsumerState<SelectLocationScreen> {
   final MapController _mapController = MapController();
   final TextEditingController _searchController = TextEditingController();
-  
-  LatLng _currentLatLng = const LatLng(18.8972, 99.0112); // Default Maejo
-  String _resolvedAddress = 'กำลังโหลดตำแหน่ง...';
+
+  // Map center only. This point is never a confirmed pickup or drop-off.
+  LatLng _currentLatLng = const LatLng(18.7883, 98.9853);
+  String _resolvedAddress = 'ค้นหาสถานที่หรือเลื่อนแผนที่เพื่อปักหมุด';
   bool _isGeocoding = false;
+  bool _hasSelectedLocation = false;
+  int _locationSelectionId = 0;
   Timer? _debounceTimer;
   Timer? _searchDebounceTimer;
 
-  // Mock search results database for standard demonstration
-  final List<Map<String, dynamic>> _mockPlaces = [
-    {
-      'name': 'แม่โจ้, หอพักพนม',
-      'address': 'ถ.สหกรณ์ ต.หนองหาร อ.สันทราย เชียงใหม่',
-      'latlng': const LatLng(18.8972, 99.0112)
-    },
-    {
-      'name': 'มหาวิทยาลัยแม่โจ้',
-      'address': 'ถ.เชียงใหม่-พร้าว ต.หนองหาร อ.สันทราย เชียงใหม่',
-      'latlng': const LatLng(18.8950, 99.0150)
-    },
-    {
-      'name': 'เซ็นทรัลเฟสติวัล เชียงใหม่',
-      'address': 'ถ.ซุปเปอร์ไฮเวย์ ต.ฟ้าฮ่าม อ.เมือง เชียงใหม่',
-      'latlng': const LatLng(18.8075, 99.0182)
-    },
-    {
-      'name': 'ท่าอากาศยานเชียงใหม่ (CNX)',
-      'address': 'ถ.มหิดล ต.สุเทพ อ.เมือง เชียงใหม่',
-      'latlng': const LatLng(18.7670, 98.9632)
-    },
-    {
-      'name': 'นิมมานเหมินท์ ซอย 9',
-      'address': 'ต.สุเทพ อ.เมือง เชียงใหม่',
-      'latlng': const LatLng(18.7989, 98.9681)
-    },
-    {
-      'name': 'กาดหลวง (ตลาดวโรรส)',
-      'address': 'ถ.วิชยานนท์ ต.ช้างม่อย อ.เมือง เชียงใหม่',
-      'latlng': const LatLng(18.7903, 99.0003)
-    },
-  ];
-
   List<Map<String, dynamic>> _searchResults = [];
   bool _showSearchResults = false;
+  bool _isSearching = false;
+  bool _searchFailed = false;
+  int _searchRequestId = 0;
 
   @override
   void initState() {
     super.initState();
     final reqState = ref.read(requestDriverControllerProvider);
-    
-    // Set initial coordinates based on current state
-    if (widget.isPickup) {
+
+    if (widget.isPickingForProfile) {
+      final user = ref.read(userProvider);
+      if (user?.homeLatLng != null) {
+        _currentLatLng = user!.homeLatLng!;
+        _resolvedAddress = user.homeDisplayName ?? 'ที่อยู่บ้านที่บันทึกไว้';
+        _hasSelectedLocation = true;
+      }
+    } else if (widget.isPickup) {
       if (reqState.pickupLatLng != null) {
         _currentLatLng = reqState.pickupLatLng!;
         _resolvedAddress = reqState.pickupAddress ?? 'ตำแหน่งปักหมุด';
+        _hasSelectedLocation = true;
       } else {
-        // Automatically fetch current location on screen open if not set yet
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          _getCurrentLocation();
+          if (mounted) _getCurrentLocation();
         });
       }
     } else {
       if (reqState.dropoffLatLng != null) {
         _currentLatLng = reqState.dropoffLatLng!;
         _resolvedAddress = reqState.dropoffAddress ?? 'ตำแหน่งปักหมุด';
+        _hasSelectedLocation = true;
       } else if (reqState.pickupLatLng != null) {
-        // If drop-off not set yet, center around pickup location
+        // Center the map near pickup, but do not select it as the destination.
         _currentLatLng = reqState.pickupLatLng!;
-        _resolvedAddress = 'กำลังค้นหาตำแหน่งปลายทาง...';
       }
-    }
-
-    // Run initial reverse geocode if address not loaded
-    if (_resolvedAddress == 'กำลังโหลดตำแหน่ง...' || _resolvedAddress == 'กำลังค้นหาตำแหน่งปลายทาง...') {
-      _reverseGeocode(_currentLatLng);
     }
   }
 
@@ -116,30 +90,41 @@ class _SelectLocationScreenState extends ConsumerState<SelectLocationScreen> {
     super.dispose();
   }
 
-  Future<void> _reverseGeocode(LatLng latLng) async {
+  Future<void> _reverseGeocode(LatLng latLng, int selectionId) async {
+    if (!mounted || selectionId != _locationSelectionId) return;
     setState(() {
       _isGeocoding = true;
     });
     try {
       final url = Uri.parse(
-          'https://nominatim.openstreetmap.org/reverse?format=json&lat=${latLng.latitude}&lon=${latLng.longitude}&zoom=18&addressdetails=1');
-      final response = await http.get(url, headers: {
-        'User-Agent': 'SafeSeatMiniApp/1.0',
-        'Accept-Language': 'th,en',
-      });
-      
-      if (!mounted) return;
+        'https://nominatim.openstreetmap.org/reverse?format=json&lat=${latLng.latitude}&lon=${latLng.longitude}&zoom=18&addressdetails=1',
+      );
+      final response = await http
+          .get(
+            url,
+            headers: {
+              'User-Agent': 'SafeSeatMiniApp/1.0',
+              'Accept-Language': 'th,en',
+            },
+          )
+          .timeout(const Duration(seconds: 12));
+
+      if (!mounted || selectionId != _locationSelectionId) return;
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         final displayName = data['display_name'] as String?;
-        if (displayName != null) {
+        if (displayName != null && displayName.trim().isNotEmpty) {
           final address = data['address'] as Map<String, dynamic>?;
           String shortName = '';
           if (address != null) {
             final road = address['road'];
             final suburb = address['suburb'] ?? address['neighbourhood'];
-            final city = address['city'] ?? address['town'] ?? address['municipality'] ?? address['province'];
-            
+            final city =
+                address['city'] ??
+                address['town'] ??
+                address['municipality'] ??
+                address['province'];
+
             if (road != null) {
               shortName += '$road';
             }
@@ -152,7 +137,7 @@ class _SelectLocationScreenState extends ConsumerState<SelectLocationScreen> {
               shortName += '$city';
             }
           }
-          
+
           if (shortName.isEmpty) {
             final parts = displayName.split(',');
             shortName = parts.take(2).join(', ').trim();
@@ -161,17 +146,21 @@ class _SelectLocationScreenState extends ConsumerState<SelectLocationScreen> {
           setState(() {
             _resolvedAddress = shortName;
           });
+          return;
         }
       }
-    } catch (e) {
-      // keep previous or display coords
-      if (mounted) {
-        setState(() {
-          _resolvedAddress = '${latLng.latitude.toStringAsFixed(4)}, ${latLng.longitude.toStringAsFixed(4)}';
-        });
-      }
+      setState(() {
+        _resolvedAddress =
+            '${latLng.latitude.toStringAsFixed(4)}, ${latLng.longitude.toStringAsFixed(4)}';
+      });
+    } catch (_) {
+      if (!mounted || selectionId != _locationSelectionId) return;
+      setState(() {
+        _resolvedAddress =
+            '${latLng.latitude.toStringAsFixed(4)}, ${latLng.longitude.toStringAsFixed(4)}';
+      });
     } finally {
-      if (mounted) {
+      if (mounted && selectionId == _locationSelectionId) {
         setState(() {
           _isGeocoding = false;
         });
@@ -180,68 +169,57 @@ class _SelectLocationScreenState extends ConsumerState<SelectLocationScreen> {
   }
 
   Future<void> _getCurrentLocation() async {
-    bool serviceEnabled;
-    LocationPermission permission;
-
-    serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) {
-      if (mounted) {
-        AppSnackBar.showWarning(context, 'กรุณาเปิดบริการระบุตำแหน่ง (GPS)');
-      }
-      return;
-    }
-
-    permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-      if (permission == LocationPermission.denied) {
-        if (mounted) {
-          AppSnackBar.showWarning(context, 'สิทธิ์การเข้าถึงตำแหน่งถูกปฏิเสธ');
-        }
+    final selectionIdBeforeRequest = _locationSelectionId;
+    try {
+      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!mounted) return;
+      if (!serviceEnabled) {
+        AppSnackBar.showWarning(context, 'โปรดเปิดบริการระบุตำแหน่งในอุปกรณ์');
         return;
       }
-    }
-    
-    if (permission == LocationPermission.deniedForever) {
-      if (mounted) {
+
+      var permission = await Geolocator.checkPermission();
+      if (!mounted) return;
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (!mounted) return;
+        if (permission == LocationPermission.denied) {
+          AppSnackBar.showWarning(context, 'โปรดอนุญาตให้แอปเข้าถึงตำแหน่ง');
+          return;
+        }
+      }
+      if (permission == LocationPermission.deniedForever) {
         AppSnackBar.showError(
           context,
-          'สิทธิ์การระบุตำแหน่งถูกปฏิเสธอย่างถาวร กรุณาเปิดสิทธิ์ในการตั้งค่าของอุปกรณ์',
+          'โปรดเปิดสิทธิ์เข้าถึงตำแหน่งในการตั้งค่าอุปกรณ์',
         );
+        return;
       }
-      return;
-    } 
 
-    if (!mounted) return;
-    setState(() {
-      _isGeocoding = true;
-    });
-
-    try {
       final position = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
           accuracy: LocationAccuracy.high,
         ),
       );
-      
+
       final latLng = LatLng(position.latitude, position.longitude);
-      
-      if (!mounted) return;
+      if (!mounted || selectionIdBeforeRequest != _locationSelectionId) return;
+      _debounceTimer?.cancel();
+      _mapController.move(latLng, 16.0);
+      final selectionId = ++_locationSelectionId;
       setState(() {
         _currentLatLng = latLng;
+        _resolvedAddress = 'กำลังค้นหาที่อยู่...';
+        _hasSelectedLocation = true;
+        _isGeocoding = true;
       });
-
-      _mapController.move(latLng, 16.0);
-      await _reverseGeocode(latLng);
-    } catch (e) {
+      await _reverseGeocode(latLng, selectionId);
+    } catch (_) {
       if (mounted) {
-        AppSnackBar.showError(context, 'ไม่สามารถดึงตำแหน่งปัจจุบันได้: $e');
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isGeocoding = false;
-        });
+        AppSnackBar.showError(
+          context,
+          'ดึงตำแหน่งปัจจุบันไม่ได้ โปรดลองอีกครั้ง',
+        );
       }
     }
   }
@@ -249,64 +227,112 @@ class _SelectLocationScreenState extends ConsumerState<SelectLocationScreen> {
   void _onMapPositionChanged(MapCamera camera, bool hasGesture) {
     _currentLatLng = camera.center;
     if (hasGesture) {
+      final selectionId = ++_locationSelectionId;
+      if (!_hasSelectedLocation ||
+          !_isGeocoding ||
+          _resolvedAddress != 'กำลังค้นหาที่อยู่...') {
+        setState(() {
+          _hasSelectedLocation = true;
+          _isGeocoding = true;
+          _resolvedAddress = 'กำลังค้นหาที่อยู่...';
+        });
+      }
       _debounceTimer?.cancel();
       _debounceTimer = Timer(const Duration(milliseconds: 650), () {
-        _reverseGeocode(_currentLatLng);
+        _reverseGeocode(camera.center, selectionId);
       });
     }
   }
 
   void _onSearchChanged(String query) {
     _searchDebounceTimer?.cancel();
-    if (query.trim().isEmpty) {
+    final searchQuery = query.trim();
+    final requestId = ++_searchRequestId;
+    if (searchQuery.isEmpty) {
       setState(() {
         _searchResults = [];
         _showSearchResults = false;
+        _isSearching = false;
+        _searchFailed = false;
       });
       return;
     }
 
+    setState(() {
+      _searchResults = [];
+      _showSearchResults = true;
+      _isSearching = true;
+      _searchFailed = false;
+    });
     _searchDebounceTimer = Timer(const Duration(milliseconds: 500), () {
-      _performSearch(query);
+      _performSearch(searchQuery, requestId);
     });
   }
 
-  Future<void> _performSearch(String query) async {
+  void _retrySearch() {
+    final query = _searchController.text.trim();
+    if (query.isEmpty) return;
+    _searchDebounceTimer?.cancel();
+    final requestId = ++_searchRequestId;
+    setState(() {
+      _isSearching = true;
+      _searchFailed = false;
+      _searchResults = [];
+    });
+    _performSearch(query, requestId);
+  }
+
+  void _useMapPin() {
+    _searchDebounceTimer?.cancel();
+    ++_searchRequestId;
+    _searchController.clear();
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _searchResults = [];
+      _showSearchResults = false;
+      _isSearching = false;
+      _searchFailed = false;
+    });
+  }
+
+  Future<void> _performSearch(String query, int requestId) async {
     try {
       final url = Uri.parse(
-        '${ApiConstants.baseUrl}/api/user/location/search?q=${Uri.encodeComponent(query)}&lat=${_currentLatLng.latitude}&lng=${_currentLatLng.longitude}'
+        '${ApiConstants.baseUrl}/api/user/location/search?q=${Uri.encodeComponent(query)}&lat=${_currentLatLng.latitude}&lng=${_currentLatLng.longitude}',
       );
 
-      final response = await http.get(url, headers: {'Content-Type': 'application/json'});
-      if (!mounted) return;
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final List results = data['results'] ?? [];
-        
-        setState(() {
-          _searchResults = results.map<Map<String, dynamic>>((item) => {
-            'name': item['name'] ?? '',
-            'address': item['address'] ?? '',
-            'latlng': LatLng(
-              (item['latitude'] as num).toDouble(),
-              (item['longitude'] as num).toDouble(),
-            ),
-          }).toList();
-          _showSearchResults = true;
-        });
+      final response = await http
+          .get(url, headers: {'Content-Type': 'application/json'})
+          .timeout(const Duration(seconds: 12));
+      if (response.statusCode != 200) {
+        throw const FormatException('Location search unavailable');
       }
-    } catch (e) {
-      // Fallback to mock search on error so the app continues working gracefully
-      final filtered = _mockPlaces.where((place) {
-        final name = place['name'].toString().toLowerCase();
-        final address = place['address'].toString().toLowerCase();
-        return name.contains(query.toLowerCase()) || address.contains(query.toLowerCase());
-      }).toList();
-
-      if (!mounted) return;
+      final data = jsonDecode(response.body);
+      final List results = data['results'] ?? [];
+      final places = results
+          .map<Map<String, dynamic>>(
+            (item) => {
+              'name': item['name'] ?? '',
+              'address': item['address'] ?? '',
+              'latlng': LatLng(
+                (item['latitude'] as num).toDouble(),
+                (item['longitude'] as num).toDouble(),
+              ),
+            },
+          )
+          .toList();
+      if (!mounted || requestId != _searchRequestId) return;
       setState(() {
-        _searchResults = filtered;
-        _showSearchResults = true;
+        _searchResults = places;
+        _isSearching = false;
+        _searchFailed = false;
+      });
+    } catch (_) {
+      if (!mounted || requestId != _searchRequestId) return;
+      setState(() {
+        _searchResults = [];
+        _isSearching = false;
+        _searchFailed = true;
       });
     }
   }
@@ -315,10 +341,17 @@ class _SelectLocationScreenState extends ConsumerState<SelectLocationScreen> {
     final name = place['name'] as String;
     final latLng = place['latlng'] as LatLng;
 
+    _searchDebounceTimer?.cancel();
+    _debounceTimer?.cancel();
+    ++_searchRequestId;
+    ++_locationSelectionId;
     setState(() {
       _currentLatLng = latLng;
       _resolvedAddress = name;
+      _hasSelectedLocation = true;
+      _isGeocoding = false;
       _showSearchResults = false;
+      _searchResults = [];
       _searchController.clear();
       FocusScope.of(context).unfocus();
     });
@@ -327,9 +360,18 @@ class _SelectLocationScreenState extends ConsumerState<SelectLocationScreen> {
   }
 
   Future<void> _selectSavedHome(String homeAddress, LatLng? homeLatLng) async {
+    _searchDebounceTimer?.cancel();
+    _debounceTimer?.cancel();
+    ++_searchRequestId;
+    final selectionId = ++_locationSelectionId;
     setState(() {
-      _resolvedAddress = homeAddress;
+      _resolvedAddress = homeLatLng == null
+          ? 'กำลังค้นหาที่อยู่บ้าน...'
+          : homeAddress;
+      _hasSelectedLocation = homeLatLng != null;
+      _isGeocoding = homeLatLng == null;
       _showSearchResults = false;
+      _searchResults = [];
       _searchController.clear();
       FocusScope.of(context).unfocus();
     });
@@ -338,33 +380,35 @@ class _SelectLocationScreenState extends ConsumerState<SelectLocationScreen> {
     if (homeLatLng != null) {
       setState(() {
         _currentLatLng = homeLatLng;
-        _isGeocoding = false;
       });
       _mapController.move(homeLatLng, 16.0);
       return;
     }
 
-    setState(() {
-      _isGeocoding = true;
-    });
-
     try {
       final searchUrl = Uri.parse(
         'https://nominatim.openstreetmap.org/search?q=${Uri.encodeComponent(homeAddress)}&format=json&limit=1',
       );
-      final response = await http.get(searchUrl, headers: {
-        'User-Agent': 'SafeSeatMiniApp/1.0',
-        'Accept-Language': 'th,en',
-      });
+      final response = await http
+          .get(
+            searchUrl,
+            headers: {
+              'User-Agent': 'SafeSeatMiniApp/1.0',
+              'Accept-Language': 'th,en',
+            },
+          )
+          .timeout(const Duration(seconds: 12));
       if (response.statusCode == 200) {
         final List data = jsonDecode(response.body);
         if (data.isNotEmpty) {
           final lat = double.parse(data[0]['lat'].toString());
           final lon = double.parse(data[0]['lon'].toString());
           final latLng = LatLng(lat, lon);
-          if (mounted) {
+          if (mounted && selectionId == _locationSelectionId) {
             setState(() {
               _currentLatLng = latLng;
+              _resolvedAddress = homeAddress;
+              _hasSelectedLocation = true;
               _isGeocoding = false;
             });
             _mapController.move(latLng, 16.0);
@@ -374,10 +418,15 @@ class _SelectLocationScreenState extends ConsumerState<SelectLocationScreen> {
       }
     } catch (_) {}
 
-    if (mounted) {
+    if (mounted && selectionId == _locationSelectionId) {
       setState(() {
+        _resolvedAddress = 'ค้นหาสถานที่หรือเลื่อนแผนที่เพื่อปักหมุด';
         _isGeocoding = false;
       });
+      AppSnackBar.showWarning(
+        context,
+        'ค้นหาพิกัดที่อยู่บ้านไม่ได้ โปรดปักหมุดเอง',
+      );
     }
   }
 
@@ -413,7 +462,9 @@ class _SelectLocationScreenState extends ConsumerState<SelectLocationScreen> {
           // 2. Fixed Centered Pin
           Center(
             child: Container(
-              margin: const EdgeInsets.only(bottom: 35), // Offset for pin point to match center
+              margin: const EdgeInsets.only(
+                bottom: 35,
+              ), // Offset for pin point to match center
               child: Stack(
                 alignment: Alignment.center,
                 children: [
@@ -429,24 +480,17 @@ class _SelectLocationScreenState extends ConsumerState<SelectLocationScreen> {
                       ),
                     ),
                   ),
-                  // The actual Pin Icon
-                  widget.isPickingForProfile
-                      ? const Icon(
-                          Icons.home,
-                          color: Color(0xFF0044C9),
-                          size: 45,
-                        )
-                      : (widget.isPickup
-                          ? const Icon(
-                              Icons.location_on,
-                              color: Colors.red,
-                              size: 45,
-                            )
-                          : const Icon(
-                              Icons.location_on,
-                              color: Color(0xFF10B981),
-                              size: 45,
-                            )),
+                  Icon(
+                    widget.isPickingForProfile ? Icons.home : Icons.location_on,
+                    color: !_hasSelectedLocation
+                        ? Colors.grey
+                        : widget.isPickingForProfile
+                        ? AppTheme.primaryColor
+                        : widget.isPickup
+                        ? AppTheme.pickupColor
+                        : AppTheme.dropoffColor,
+                    size: 45,
+                  ),
                 ],
               ),
             ),
@@ -473,14 +517,26 @@ class _SelectLocationScreenState extends ConsumerState<SelectLocationScreen> {
                     child: Row(
                       children: [
                         IconButton(
-                          icon: const Icon(Icons.arrow_back, color: Colors.black),
+                          icon: const Icon(
+                            Icons.arrow_back,
+                            color: Colors.black,
+                          ),
                           onPressed: () => Navigator.of(context).pop(),
                         ),
                         // Indicator pill
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
                           decoration: BoxDecoration(
-                            color: Colors.grey[100],
+                            color:
+                                (widget.isPickingForProfile
+                                        ? AppTheme.primaryColor
+                                        : widget.isPickup
+                                        ? AppTheme.pickupColor
+                                        : AppTheme.dropoffColor)
+                                    .withValues(alpha: 0.10),
                             borderRadius: BorderRadius.circular(15),
                           ),
                           child: Text(
@@ -491,8 +547,10 @@ class _SelectLocationScreenState extends ConsumerState<SelectLocationScreen> {
                               fontSize: 12,
                               fontWeight: FontWeight.bold,
                               color: widget.isPickingForProfile
-                                  ? const Color(0xFF0044C9)
-                                  : (widget.isPickup ? Colors.red : Colors.blueGrey[800]),
+                                  ? AppTheme.primaryColor
+                                  : (widget.isPickup
+                                        ? AppTheme.pickupColor
+                                        : AppTheme.dropoffColor),
                             ),
                           ),
                         ),
@@ -515,14 +573,10 @@ class _SelectLocationScreenState extends ConsumerState<SelectLocationScreen> {
                               _onSearchChanged('');
                             },
                           ),
-                        IconButton(
-                          icon: const Icon(Icons.mic, color: Colors.grey),
-                          onPressed: () {},
-                        ),
                       ],
                     ),
                   ),
-                  
+
                   // Quick Suggestions Chips (when search is empty)
                   if (!_showSearchResults && !widget.isPickingForProfile)
                     Padding(
@@ -531,27 +585,45 @@ class _SelectLocationScreenState extends ConsumerState<SelectLocationScreen> {
                         scrollDirection: Axis.horizontal,
                         child: Row(
                           children: [
-                            if (user?.homeDisplayName != null && user!.homeDisplayName!.trim().isNotEmpty) ...[
+                            if (user?.homeDisplayName != null &&
+                                user!.homeDisplayName!.trim().isNotEmpty) ...[
                               ActionChip(
-                                avatar: const Icon(Icons.home, color: AppTheme.primaryColor, size: 16),
+                                avatar: const Icon(
+                                  Icons.home,
+                                  color: AppTheme.primaryColor,
+                                  size: 16,
+                                ),
                                 label: Text(
                                   'บ้าน: ${user.homeDisplayName}',
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                  ),
                                 ),
                                 backgroundColor: Colors.white,
                                 elevation: 3,
                                 shadowColor: Colors.black26,
-                                onPressed: () => _selectSavedHome(user.homeDisplayName!, user.homeLatLng),
+                                onPressed: () => _selectSavedHome(
+                                  user.homeDisplayName!,
+                                  user.homeLatLng,
+                                ),
                               ),
                               const SizedBox(width: 8),
                             ],
                             ActionChip(
-                              avatar: const Icon(Icons.my_location, color: Colors.red, size: 16),
+                              avatar: const Icon(
+                                Icons.my_location,
+                                color: AppTheme.pickupColor,
+                                size: 16,
+                              ),
                               label: const Text(
                                 'ตำแหน่งปัจจุบัน',
-                                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
                               backgroundColor: Colors.white,
                               elevation: 3,
@@ -562,12 +634,17 @@ class _SelectLocationScreenState extends ConsumerState<SelectLocationScreen> {
                         ),
                       ),
                     ),
-                  
-                  // Search Results List
-                  if (_showSearchResults && _searchResults.isNotEmpty)
+
+                  // Search results and search status
+                  if (_showSearchResults)
                     Container(
                       margin: const EdgeInsets.only(top: 8),
-                      constraints: const BoxConstraints(maxHeight: 250),
+                      constraints: BoxConstraints(
+                        maxHeight:
+                            (MediaQuery.sizeOf(context).height -
+                                MediaQuery.viewInsetsOf(context).bottom) *
+                            0.28,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(20),
@@ -579,33 +656,93 @@ class _SelectLocationScreenState extends ConsumerState<SelectLocationScreen> {
                           ),
                         ],
                       ),
-                      child: ListView.builder(
-                        shrinkWrap: true,
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                        itemCount: _searchResults.length,
-                        itemBuilder: (context, index) {
-                          final place = _searchResults[index];
-                          return ListTile(
-                            leading: CircleAvatar(
-                              backgroundColor: Colors.grey[100],
-                              child: Icon(
-                                widget.isPickup ? Icons.location_on : Icons.flag,
-                                color: widget.isPickup ? Colors.red : Colors.grey,
+                      child: _isSearching
+                          ? const Padding(
+                              padding: EdgeInsets.all(20),
+                              child: Row(
+                                children: [
+                                  SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  ),
+                                  SizedBox(width: 12),
+                                  Text('กำลังค้นหาสถานที่...'),
+                                ],
                               ),
+                            )
+                          : _searchResults.isEmpty
+                          ? SingleChildScrollView(
+                              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    _searchFailed
+                                        ? 'ค้นหาสถานที่ไม่ได้ โปรดลองอีกครั้ง'
+                                        : 'ไม่พบสถานที่ ลองใช้คำค้นอื่น',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  const Text('หรือเลื่อนแผนที่เพื่อปักหมุดเอง'),
+                                  Wrap(
+                                    spacing: 8,
+                                    children: [
+                                      if (_searchFailed)
+                                        TextButton.icon(
+                                          onPressed: _retrySearch,
+                                          icon: const Icon(Icons.refresh),
+                                          label: const Text('ลองอีกครั้ง'),
+                                        ),
+                                      TextButton.icon(
+                                        onPressed: _useMapPin,
+                                        icon: const Icon(Icons.place_outlined),
+                                        label: const Text('ปักหมุดบนแผนที่'),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            )
+                          : ListView.builder(
+                              shrinkWrap: true,
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                              itemCount: _searchResults.length,
+                              itemBuilder: (context, index) {
+                                final place = _searchResults[index];
+                                return ListTile(
+                                  leading: CircleAvatar(
+                                    backgroundColor: Colors.grey[100],
+                                    child: Icon(
+                                      widget.isPickup
+                                          ? Icons.location_on
+                                          : Icons.flag,
+                                      color: widget.isPickingForProfile
+                                          ? AppTheme.primaryColor
+                                          : widget.isPickup
+                                          ? AppTheme.pickupColor
+                                          : AppTheme.dropoffColor,
+                                    ),
+                                  ),
+                                  title: Text(
+                                    place['name'],
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  subtitle: Text(
+                                    place['address'],
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  onTap: () => _selectSearchResult(place),
+                                );
+                              },
                             ),
-                            title: Text(
-                              place['name'],
-                              style: const TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                            subtitle: Text(
-                              place['address'],
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            onTap: () => _selectSearchResult(place),
-                          );
-                        },
-                      ),
                     ),
                 ],
               ),
@@ -613,190 +750,235 @@ class _SelectLocationScreenState extends ConsumerState<SelectLocationScreen> {
           ),
 
           // 4. Bottom Confirmation Panel
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: Container(
-              padding: const EdgeInsets.all(24.0),
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(30),
-                  topRight: Radius.circular(30),
+          if (MediaQuery.viewInsetsOf(context).bottom == 0)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: Container(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.sizeOf(context).height * 0.44,
                 ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black12,
-                    blurRadius: 15,
-                    spreadRadius: 2,
-                    offset: Offset(0, -3),
+                decoration: const BoxDecoration(
+                  color: AppTheme.surfaceColor,
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(30),
+                    topRight: Radius.circular(30),
                   ),
-                ],
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    titleText,
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF1E293B),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black12,
+                      blurRadius: 15,
+                      spreadRadius: 2,
+                      offset: Offset(0, -3),
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  
-                  // Location Address Box
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: widget.isPickingForProfile
-                              ? const Color(0xFF0044C9).withValues(alpha: 0.1)
-                              : (widget.isPickup 
-                                  ? Colors.red.withValues(alpha: 0.1) 
-                                  : Colors.blueGrey.withValues(alpha: 0.1)),
-                          shape: BoxShape.circle,
+                  ],
+                ),
+                child: SafeArea(
+                  top: false,
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(24, 20, 24, 20),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          titleText,
+                          style: const TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF1E293B),
+                          ),
                         ),
-                        child: Icon(
-                          widget.isPickingForProfile
-                              ? Icons.home
-                              : (widget.isPickup ? Icons.location_on : Icons.flag),
-                          color: widget.isPickingForProfile
-                              ? const Color(0xFF0044C9)
-                              : (widget.isPickup ? Colors.red : const Color(0xFF1E293B)),
-                          size: 24,
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: _isGeocoding
-                            ? const Row(
-                                children: [
-                                  SizedBox(
-                                    width: 16,
-                                    height: 16,
-                                    child: CircularProgressIndicator(strokeWidth: 2),
-                                  ),
-                                  SizedBox(width: 12),
-                                  Text(
-                                    'กำลังดึงข้อมูลตำแหน่ง...',
-                                    style: TextStyle(
-                                      color: Color(0xFF64748B),
-                                      fontSize: 14,
-                                    ),
-                                  ),
-                                ],
-                              )
-                            : Text(
-                                _resolvedAddress,
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w500,
-                                  color: Color(0xFF334155),
-                                ),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 24),
+                        const SizedBox(height: 16),
 
-                  // Confirm Button
-                  SizedBox(
-                    width: double.infinity,
-                    height: 56,
-                    child: ElevatedButton(
-                      onPressed: _isGeocoding
-                          ? null
-                          : () {
-                              if (widget.isPickingForProfile) {
-                                Navigator.of(context).pop({
-                                  'address': _resolvedAddress,
-                                  'latLng': _currentLatLng,
-                                });
-                              } else {
-                                // Save state to provider
-                                if (widget.isPickup) {
-                                  ref.read(requestDriverControllerProvider.notifier)
-                                      .setPickup(_resolvedAddress, _currentLatLng);
-                                } else {
-                                  ref.read(requestDriverControllerProvider.notifier)
-                                      .setDropoff(_resolvedAddress, _currentLatLng);
-                                }
-                                Navigator.of(context).pop();
-                              }
-                            },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: themeColor,
-                        foregroundColor: Colors.white,
-                        disabledBackgroundColor: Colors.grey[300],
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(28),
+                        // Location Address Box
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: widget.isPickingForProfile
+                                    ? AppTheme.primaryColor.withValues(
+                                        alpha: 0.1,
+                                      )
+                                    : (widget.isPickup
+                                          ? AppTheme.pickupColor.withValues(
+                                              alpha: 0.1,
+                                            )
+                                          : AppTheme.dropoffColor.withValues(
+                                              alpha: 0.1,
+                                            )),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                widget.isPickingForProfile
+                                    ? Icons.home
+                                    : (widget.isPickup
+                                          ? Icons.location_on
+                                          : Icons.flag),
+                                color: widget.isPickingForProfile
+                                    ? AppTheme.primaryColor
+                                    : (widget.isPickup
+                                          ? AppTheme.pickupColor
+                                          : AppTheme.dropoffColor),
+                                size: 24,
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: _isGeocoding
+                                  ? const Row(
+                                      children: [
+                                        SizedBox(
+                                          width: 16,
+                                          height: 16,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                          ),
+                                        ),
+                                        SizedBox(width: 12),
+                                        Text(
+                                          'กำลังดึงข้อมูลตำแหน่ง...',
+                                          style: TextStyle(
+                                            color: Color(0xFF64748B),
+                                            fontSize: 14,
+                                          ),
+                                        ),
+                                      ],
+                                    )
+                                  : Text(
+                                      _resolvedAddress,
+                                      style: const TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w500,
+                                        color: Color(0xFF334155),
+                                      ),
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                            ),
+                          ],
                         ),
-                        elevation: 0,
-                      ),
-                      child: const Text(
-                        'เสร็จสิ้น',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
+                        const SizedBox(height: 24),
+
+                        // Confirm Button
+                        SizedBox(
+                          width: double.infinity,
+                          height: 56,
+                          child: ElevatedButton(
+                            onPressed:
+                                !_hasSelectedLocation ||
+                                    _isGeocoding ||
+                                    _showSearchResults
+                                ? null
+                                : () {
+                                    if (widget.isPickingForProfile) {
+                                      Navigator.of(context).pop({
+                                        'address': _resolvedAddress,
+                                        'latLng': _currentLatLng,
+                                      });
+                                    } else {
+                                      // Save state to provider
+                                      if (widget.isPickup) {
+                                        ref
+                                            .read(
+                                              requestDriverControllerProvider
+                                                  .notifier,
+                                            )
+                                            .setPickup(
+                                              _resolvedAddress,
+                                              _currentLatLng,
+                                            );
+                                      } else {
+                                        ref
+                                            .read(
+                                              requestDriverControllerProvider
+                                                  .notifier,
+                                            )
+                                            .setDropoff(
+                                              _resolvedAddress,
+                                              _currentLatLng,
+                                            );
+                                      }
+                                      Navigator.of(context).pop();
+                                    }
+                                  },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: themeColor,
+                              foregroundColor: Colors.white,
+                              disabledBackgroundColor: Colors.grey[300],
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(28),
+                              ),
+                              elevation: 0,
+                            ),
+                            child: Text(
+                              widget.isPickingForProfile
+                                  ? 'บันทึกที่อยู่บ้าน'
+                                  : widget.isPickup
+                                  ? 'ยืนยันจุดรับ'
+                                  : 'ยืนยันจุดส่ง',
+                              style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
                         ),
-                      ),
+                      ],
                     ),
                   ),
-                ],
+                ),
               ),
             ),
-          ),
 
           // 5. Floating Action Buttons (Zoom and My Location)
-          Positioned(
-            right: 16,
-            bottom: 240, // Floating above the bottom card
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Zoom In
-                FloatingActionButton.small(
-                  heroTag: 'zoom_in_btn',
-                  onPressed: () {
-                    final currentZoom = _mapController.camera.zoom;
-                    _mapController.move(_currentLatLng, currentZoom + 1);
-                  },
-                  backgroundColor: Colors.white,
-                  foregroundColor: const Color(0xFF1E293B),
-                  child: const Icon(Icons.add),
-                ),
-                const SizedBox(height: 8),
-                // Zoom Out
-                FloatingActionButton.small(
-                  heroTag: 'zoom_out_btn',
-                  onPressed: () {
-                    final currentZoom = _mapController.camera.zoom;
-                    _mapController.move(_currentLatLng, currentZoom - 1);
-                  },
-                  backgroundColor: Colors.white,
-                  foregroundColor: const Color(0xFF1E293B),
-                  child: const Icon(Icons.remove),
-                ),
-                const SizedBox(height: 12),
-                // My Location
-                FloatingActionButton(
-                  heroTag: 'my_location_btn',
-                  onPressed: _getCurrentLocation,
-                  backgroundColor: Colors.white,
-                  foregroundColor: const Color(0xFF1E293B),
-                  child: const Icon(Icons.my_location),
-                ),
-              ],
+          if (MediaQuery.viewInsetsOf(context).bottom == 0 &&
+              !_showSearchResults &&
+              MediaQuery.sizeOf(context).height > 560)
+            Positioned(
+              right: 16,
+              bottom: MediaQuery.sizeOf(context).height * 0.44 + 12,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Zoom In
+                  FloatingActionButton(
+                    heroTag: 'zoom_in_btn',
+                    onPressed: () {
+                      final currentZoom = _mapController.camera.zoom;
+                      _mapController.move(_currentLatLng, currentZoom + 1);
+                    },
+                    backgroundColor: Colors.white,
+                    foregroundColor: const Color(0xFF1E293B),
+                    child: const Icon(Icons.add),
+                  ),
+                  const SizedBox(height: 8),
+                  // Zoom Out
+                  FloatingActionButton(
+                    heroTag: 'zoom_out_btn',
+                    onPressed: () {
+                      final currentZoom = _mapController.camera.zoom;
+                      _mapController.move(_currentLatLng, currentZoom - 1);
+                    },
+                    backgroundColor: Colors.white,
+                    foregroundColor: const Color(0xFF1E293B),
+                    child: const Icon(Icons.remove),
+                  ),
+                  const SizedBox(height: 12),
+                  // My Location
+                  FloatingActionButton(
+                    heroTag: 'my_location_btn',
+                    onPressed: _getCurrentLocation,
+                    backgroundColor: Colors.white,
+                    foregroundColor: const Color(0xFF1E293B),
+                    child: const Icon(Icons.my_location),
+                  ),
+                ],
+              ),
             ),
-          ),
         ],
       ),
     );

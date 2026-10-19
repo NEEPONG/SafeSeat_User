@@ -19,6 +19,7 @@ dependencies:
   latlong2: ^0.9.1
   supabase_flutter: ^2.12.4
   share_plus: ^7.2.1
+  url_launcher: ^6.3.2
 
 dev_dependencies:
   flutter_test:

@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:safeseat_mini/core/theme/app_theme.dart';
 import 'package:safeseat_mini/core/widgets/driver_avatar.dart';
 import 'package:safeseat_mini/data/models/driver_report_model.dart';
 
@@ -30,11 +31,14 @@ class HistoryReportDetailsScreen extends StatefulWidget {
   const HistoryReportDetailsScreen({super.key, required this.report});
 
   @override
-  State<HistoryReportDetailsScreen> createState() => _HistoryReportDetailsScreenState();
+  State<HistoryReportDetailsScreen> createState() =>
+      _HistoryReportDetailsScreenState();
 }
 
-class _HistoryReportDetailsScreenState extends State<HistoryReportDetailsScreen> {
+class _HistoryReportDetailsScreenState
+    extends State<HistoryReportDetailsScreen> {
   bool _isLoading = true;
+  bool _loadFailed = false;
   List<ReportedDriverInfo> _reportedDrivers = [];
 
   @override
@@ -50,7 +54,8 @@ class _HistoryReportDetailsScreenState extends State<HistoryReportDetailsScreen>
     final idRegex = RegExp(r'\[ID:\s*([^\]]+)\]', caseSensitive: false);
     final match = idRegex.firstMatch(detail);
     if (match != null && match.group(1) != null) {
-      return match.group(1)!
+      return match
+          .group(1)!
           .split(',')
           .map((s) => s.trim())
           .where((s) => s.isNotEmpty)
@@ -64,7 +69,10 @@ class _HistoryReportDetailsScreenState extends State<HistoryReportDetailsScreen>
     if (detail == null) return '';
     return detail
         .replaceAll(RegExp(r'\[ID:\s*[^\]]+\]\s*', caseSensitive: false), '')
-        .replaceAll(RegExp(r'\[เป้าหมาย:\s*[^\]]+\]\s*', caseSensitive: false), '')
+        .replaceAll(
+          RegExp(r'\[เป้าหมาย:\s*[^\]]+\]\s*', caseSensitive: false),
+          '',
+        )
         .trim();
   }
 
@@ -100,18 +108,21 @@ class _HistoryReportDetailsScreenState extends State<HistoryReportDetailsScreen>
     if (pathStr.startsWith('images/')) {
       pathStr = pathStr.substring(7);
     }
-    return Supabase.instance.client.storage.from('images').getPublicUrl(pathStr);
+    return Supabase.instance.client.storage
+        .from('images')
+        .getPublicUrl(pathStr);
   }
 
   Future<void> _fetchReportedDrivers() async {
     setState(() {
       _isLoading = true;
+      _loadFailed = false;
     });
 
     try {
       final detail = widget.report.reportDetail ?? '';
       List<String> targetUsernames = _extractReportedDriverIds(detail);
-      
+
       // Also fetch trip context (requestbyuser and buddyteam) to identify roles & fallback drivers
       String? leaderUsername;
       String? followerUsername;
@@ -145,10 +156,7 @@ class _HistoryReportDetailsScreenState extends State<HistoryReportDetailsScreen>
         } else if (detail.contains('หัวหน้าทีม') && leaderUsername != null) {
           targetUsernames = [leaderUsername];
         } else {
-          targetUsernames = [
-            ?leaderUsername,
-            ?followerUsername,
-          ];
+          targetUsernames = [?leaderUsername, ?followerUsername];
         }
       }
 
@@ -158,7 +166,9 @@ class _HistoryReportDetailsScreenState extends State<HistoryReportDetailsScreen>
         // Query driver records with vehicle details
         final driverRows = await Supabase.instance.client
             .from('driver')
-            .select('username, firstname, lastname, phoneno, regisimagepath, drivercar:driver_car(carbrand, carmodel, carplate)')
+            .select(
+              'username, firstname, lastname, phoneno, regisimagepath, drivercar:driver_car(carbrand, carmodel, carplate)',
+            )
             .inFilter('username', targetUsernames);
 
         // Query reviews to calculate driver rating
@@ -193,17 +203,21 @@ class _HistoryReportDetailsScreenState extends State<HistoryReportDetailsScreen>
           for (var row in driverRows) {
             final u = row['username']?.toString() ?? '';
             final uLower = u.toLowerCase();
-            
+
             // Determine role
             String role = 'ผู้ขับรถของคุณ';
-            if (leaderUsername != null && uLower == leaderUsername.toLowerCase()) {
+            if (leaderUsername != null &&
+                uLower == leaderUsername.toLowerCase()) {
               role = 'คนขับหลัก (หัวหน้าทีม)';
-            } else if (followerUsername != null && uLower == followerUsername.toLowerCase()) {
+            } else if (followerUsername != null &&
+                uLower == followerUsername.toLowerCase()) {
               role = 'ผู้ช่วยผู้ขับรถ (ผู้ติดตาม)';
             }
 
             final ratingVal = driverRatings[uLower];
-            final ratingStr = ratingVal != null ? ratingVal.toStringAsFixed(1) : '5.0';
+            final ratingStr = ratingVal != null
+                ? ratingVal.toStringAsFixed(1)
+                : '';
 
             String? carVehicle;
             if (row['drivercar'] != null && row['drivercar'] is Map) {
@@ -211,10 +225,16 @@ class _HistoryReportDetailsScreenState extends State<HistoryReportDetailsScreen>
               final model = row['drivercar']['carmodel']?.toString();
               final plate = row['drivercar']['carplate']?.toString();
               final parts = <String>[];
-              if (brand != null && brand.trim().isNotEmpty) parts.add(brand.trim());
-              if (model != null && model.trim().isNotEmpty) parts.add(model.trim());
+              if (brand != null && brand.trim().isNotEmpty) {
+                parts.add(brand.trim());
+              }
+              if (model != null && model.trim().isNotEmpty) {
+                parts.add(model.trim());
+              }
               final modelStr = parts.join(' ');
-              if (modelStr.isNotEmpty && plate != null && plate.trim().isNotEmpty) {
+              if (modelStr.isNotEmpty &&
+                  plate != null &&
+                  plate.trim().isNotEmpty) {
                 carVehicle = '$modelStr • $plate';
               } else if (modelStr.isNotEmpty) {
                 carVehicle = modelStr;
@@ -223,15 +243,18 @@ class _HistoryReportDetailsScreenState extends State<HistoryReportDetailsScreen>
               }
             }
 
-            drivers.add(ReportedDriverInfo(
-              username: u,
-              fullname: '${row['firstname'] ?? ''} ${row['lastname'] ?? ''}'.trim(),
-              role: role,
-              phoneNo: row['phoneno']?.toString(),
-              licensePlate: carVehicle,
-              imageUrl: _getDriverProfileImageUrl(row['regisimagepath']),
-              rating: ratingStr,
-            ));
+            drivers.add(
+              ReportedDriverInfo(
+                username: u,
+                fullname: '${row['firstname'] ?? ''} ${row['lastname'] ?? ''}'
+                    .trim(),
+                role: role,
+                phoneNo: row['phoneno']?.toString(),
+                licensePlate: carVehicle,
+                imageUrl: _getDriverProfileImageUrl(row['regisimagepath']),
+                rating: ratingStr,
+              ),
+            );
           }
         }
       }
@@ -247,6 +270,7 @@ class _HistoryReportDetailsScreenState extends State<HistoryReportDetailsScreen>
       if (mounted) {
         setState(() {
           _isLoading = false;
+          _loadFailed = true;
         });
       }
     }
@@ -255,8 +279,18 @@ class _HistoryReportDetailsScreenState extends State<HistoryReportDetailsScreen>
   String _formatDateTimeThai(DateTime? dateTime) {
     if (dateTime == null) return '';
     final months = [
-      'มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
-      'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'
+      'มกราคม',
+      'กุมภาพันธ์',
+      'มีนาคม',
+      'เมษายน',
+      'พฤษภาคม',
+      'มิถุนายน',
+      'กรกฎาคม',
+      'สิงหาคม',
+      'กันยายน',
+      'ตุลาคม',
+      'พฤศจิกายน',
+      'ธันวาคม',
     ];
     final day = dateTime.day;
     final month = months[dateTime.month - 1];
@@ -272,7 +306,10 @@ class _HistoryReportDetailsScreenState extends State<HistoryReportDetailsScreen>
   }
 
   Widget _buildProgressBar(String status) {
-    final isReviewing = status == 'กำลังดำเนินการ' || status == 'เสร็จสิ้น' || status == 'แก้ไขแล้ว';
+    final isReviewing =
+        status == 'กำลังดำเนินการ' ||
+        status == 'เสร็จสิ้น' ||
+        status == 'แก้ไขแล้ว';
     final isResolved = status == 'เสร็จสิ้น' || status == 'แก้ไขแล้ว';
 
     return Column(
@@ -284,7 +321,7 @@ class _HistoryReportDetailsScreenState extends State<HistoryReportDetailsScreen>
               child: Container(
                 height: 6,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF0D47A1),
+                  color: AppTheme.primaryColor,
                   borderRadius: BorderRadius.circular(3),
                 ),
               ),
@@ -295,7 +332,7 @@ class _HistoryReportDetailsScreenState extends State<HistoryReportDetailsScreen>
               child: Container(
                 height: 6,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFE2E8F0),
+                  color: AppTheme.borderColor,
                   borderRadius: BorderRadius.circular(3),
                 ),
                 child: Stack(
@@ -304,7 +341,7 @@ class _HistoryReportDetailsScreenState extends State<HistoryReportDetailsScreen>
                       widthFactor: isResolved ? 1.0 : (isReviewing ? 0.5 : 0.0),
                       child: Container(
                         decoration: BoxDecoration(
-                          color: const Color(0xFF0D47A1),
+                          color: AppTheme.primaryColor,
                           borderRadius: BorderRadius.circular(3),
                         ),
                       ),
@@ -319,7 +356,9 @@ class _HistoryReportDetailsScreenState extends State<HistoryReportDetailsScreen>
               child: Container(
                 height: 6,
                 decoration: BoxDecoration(
-                  color: isResolved ? const Color(0xFF0D47A1) : const Color(0xFFE2E8F0),
+                  color: isResolved
+                      ? AppTheme.primaryColor
+                      : AppTheme.borderColor,
                   borderRadius: BorderRadius.circular(3),
                 ),
               ),
@@ -332,34 +371,38 @@ class _HistoryReportDetailsScreenState extends State<HistoryReportDetailsScreen>
           children: [
             const Expanded(
               child: Text(
-                'Submitted',
+                'ส่งรายงาน',
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  fontSize: 11,
+                  fontSize: 13,
                   fontWeight: FontWeight.bold,
-                  color: Color(0xFF0D47A1),
+                  color: AppTheme.primaryColor,
                 ),
               ),
             ),
             Expanded(
               child: Text(
-                'Reviewing',
+                'กำลังตรวจสอบ',
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  fontSize: 11,
+                  fontSize: 13,
                   fontWeight: FontWeight.bold,
-                  color: isReviewing ? const Color(0xFF0D47A1) : const Color(0xFF94A3B8),
+                  color: isReviewing
+                      ? AppTheme.primaryColor
+                      : AppTheme.textMuted,
                 ),
               ),
             ),
             Expanded(
               child: Text(
-                'Resolved',
+                'ดำเนินการแล้ว',
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  fontSize: 11,
+                  fontSize: 13,
                   fontWeight: FontWeight.bold,
-                  color: isResolved ? const Color(0xFF0D47A1) : const Color(0xFF94A3B8),
+                  color: isResolved
+                      ? AppTheme.primaryColor
+                      : AppTheme.textMuted,
                 ),
               ),
             ),
@@ -374,9 +417,9 @@ class _HistoryReportDetailsScreenState extends State<HistoryReportDetailsScreen>
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFC),
+        color: AppTheme.backgroundColor,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: AppTheme.borderColor),
       ),
       child: Row(
         children: [
@@ -384,9 +427,19 @@ class _HistoryReportDetailsScreenState extends State<HistoryReportDetailsScreen>
             imageUrl: driver.imageUrl,
             fallbackName: driver.fullname,
             radius: 28,
-            badgeText: driver.role.contains('หัวหน้า') || driver.role.contains('คนขับหลัก') ? 'D1' : (driver.role.contains('ผู้ช่วย') ? 'D2' : null),
-            badgeColor: driver.role.contains('หัวหน้า') || driver.role.contains('คนขับหลัก') ? const Color(0xFF0D47A1) : const Color(0xFF64748B),
-            defaultIcon: driver.role.contains('ผู้ช่วย') ? Icons.motorcycle : Icons.person,
+            badgeText:
+                driver.role.contains('หัวหน้า') ||
+                    driver.role.contains('คนขับหลัก')
+                ? 'D1'
+                : (driver.role.contains('ผู้ช่วย') ? 'D2' : null),
+            badgeColor:
+                driver.role.contains('หัวหน้า') ||
+                    driver.role.contains('คนขับหลัก')
+                ? AppTheme.primaryColor
+                : AppTheme.textSecondary,
+            defaultIcon: driver.role.contains('ผู้ช่วย')
+                ? Icons.motorcycle
+                : Icons.person,
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -394,11 +447,13 @@ class _HistoryReportDetailsScreenState extends State<HistoryReportDetailsScreen>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  driver.fullname.isNotEmpty ? driver.fullname : driver.username,
+                  driver.fullname.isNotEmpty
+                      ? driver.fullname
+                      : driver.username,
                   style: const TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFF0F172A),
+                    color: AppTheme.textPrimary,
                   ),
                 ),
                 const SizedBox(height: 2),
@@ -407,7 +462,7 @@ class _HistoryReportDetailsScreenState extends State<HistoryReportDetailsScreen>
                   style: const TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
-                    color: Color(0xFF0D47A1),
+                    color: AppTheme.primaryColor,
                   ),
                 ),
                 if (driver.phoneNo != null && driver.phoneNo!.isNotEmpty) ...[
@@ -416,36 +471,37 @@ class _HistoryReportDetailsScreenState extends State<HistoryReportDetailsScreen>
                     'โทร: ${driver.phoneNo}',
                     style: const TextStyle(
                       fontSize: 11,
-                      color: Color(0xFF64748B),
+                      color: AppTheme.textSecondary,
                     ),
                   ),
                 ],
               ],
             ),
           ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFFE2E8F0)),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  driver.rating,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF0F172A),
+          if (driver.rating.isNotEmpty)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppTheme.borderColor),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    driver.rating,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.textPrimary,
+                    ),
                   ),
-                ),
-                const SizedBox(width: 4),
-                const Icon(Icons.star, color: Colors.amber, size: 14),
-              ],
+                  const SizedBox(width: 4),
+                  const Icon(Icons.star, color: Colors.amber, size: 14),
+                ],
+              ),
             ),
-          ),
         ],
       ),
     );
@@ -462,27 +518,31 @@ class _HistoryReportDetailsScreenState extends State<HistoryReportDetailsScreen>
     final cleanDetail = _cleanReportDetail(report.reportDetail);
 
     // Image Paths parsing
-    final List<String> imagePaths = report.reportImagePath != null && report.reportImagePath!.isNotEmpty
-        ? report.reportImagePath!.split(',').where((p) => p.trim().isNotEmpty).toList()
+    final List<String> imagePaths =
+        report.reportImagePath != null && report.reportImagePath!.isNotEmpty
+        ? report.reportImagePath!
+              .split(',')
+              .where((p) => p.trim().isNotEmpty)
+              .toList()
         : [];
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
         scrolledUnderElevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Color(0xFF0F172A)),
+          icon: const Icon(Icons.arrow_back, color: AppTheme.textPrimary),
           onPressed: () => Navigator.of(context).pop(),
         ),
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Report Status',
+              'สถานะรายงาน',
               style: TextStyle(
-                color: Color(0xFF0F172A),
+                color: AppTheme.textPrimary,
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
               ),
@@ -490,7 +550,7 @@ class _HistoryReportDetailsScreenState extends State<HistoryReportDetailsScreen>
             Text(
               orderCode,
               style: const TextStyle(
-                color: Color(0xFF64748B),
+                color: AppTheme.textSecondary,
                 fontSize: 12,
                 fontWeight: FontWeight.w500,
               ),
@@ -499,7 +559,8 @@ class _HistoryReportDetailsScreenState extends State<HistoryReportDetailsScreen>
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh, color: Color(0xFF0F172A)),
+            icon: const Icon(Icons.refresh, color: AppTheme.textPrimary),
+            tooltip: 'โหลดข้อมูลคนขับใหม่',
             onPressed: _fetchReportedDrivers,
           ),
         ],
@@ -508,10 +569,13 @@ class _HistoryReportDetailsScreenState extends State<HistoryReportDetailsScreen>
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: _fetchReportedDrivers,
-          color: const Color(0xFF0D47A1),
+          color: AppTheme.primaryColor,
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 20.0),
+            padding: const EdgeInsets.symmetric(
+              horizontal: 24.0,
+              vertical: 20.0,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -524,29 +588,38 @@ class _HistoryReportDetailsScreenState extends State<HistoryReportDetailsScreen>
                         decoration: BoxDecoration(
                           color: const Color(0xFFF1F5F9).withValues(alpha: 0.8),
                           shape: BoxShape.circle,
-                          border: Border.all(color: const Color(0xFFE2E8F0), width: 1.5),
+                          border: Border.all(
+                            color: AppTheme.borderColor,
+                            width: 1.5,
+                          ),
                         ),
                         child: Icon(
-                          isResolved ? Icons.assignment_turned_in_rounded : Icons.pending_actions_rounded,
-                          color: const Color(0xFF0D47A1),
+                          isResolved
+                              ? Icons.assignment_turned_in_rounded
+                              : Icons.pending_actions_rounded,
+                          color: isResolved
+                              ? AppTheme.successColor
+                              : AppTheme.warningColor,
                           size: 56,
                         ),
                       ),
                       const SizedBox(height: 24),
                       Text(
-                        isResolved ? 'แก้ไขปัญหาเรียบร้อยแล้ว' : 'กำลังอยู่ระหว่างตรวจสอบ',
+                        isResolved
+                            ? 'แก้ไขปัญหาเรียบร้อยแล้ว'
+                            : 'กำลังอยู่ระหว่างตรวจสอบ',
                         style: const TextStyle(
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
-                          color: Color(0xFF0F172A),
+                          color: AppTheme.textPrimary,
                         ),
                       ),
                       const SizedBox(height: 8),
                       Text(
                         'รายงาน ณ วันที่ $dateStr',
                         style: const TextStyle(
-                          fontSize: 13,
-                          color: Color(0xFF64748B),
+                          fontSize: 14,
+                          color: AppTheme.textSecondary,
                         ),
                       ),
                     ],
@@ -565,7 +638,7 @@ class _HistoryReportDetailsScreenState extends State<HistoryReportDetailsScreen>
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                    border: Border.all(color: AppTheme.borderColor),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -580,12 +653,15 @@ class _HistoryReportDetailsScreenState extends State<HistoryReportDetailsScreen>
                             style: const TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.bold,
-                              color: Color(0xFF0D47A1),
+                              color: AppTheme.primaryColor,
                             ),
                           ),
                           if (_reportedDrivers.isNotEmpty)
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 3,
+                              ),
                               decoration: BoxDecoration(
                                 color: const Color(0xFFEFF6FF),
                                 borderRadius: BorderRadius.circular(10),
@@ -595,7 +671,7 @@ class _HistoryReportDetailsScreenState extends State<HistoryReportDetailsScreen>
                                 style: const TextStyle(
                                   fontSize: 11,
                                   fontWeight: FontWeight.bold,
-                                  color: Color(0xFF2563EB),
+                                  color: AppTheme.accentColor,
                                 ),
                               ),
                             ),
@@ -609,23 +685,47 @@ class _HistoryReportDetailsScreenState extends State<HistoryReportDetailsScreen>
                             child: CircularProgressIndicator(),
                           ),
                         ),
+                      ] else if (_loadFailed) ...[
+                        Center(
+                          child: Column(
+                            children: [
+                              const Text(
+                                'โหลดข้อมูลคนขับไม่สำเร็จ',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: AppTheme.textSecondary,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              OutlinedButton.icon(
+                                onPressed: _fetchReportedDrivers,
+                                icon: const Icon(Icons.refresh_rounded),
+                                label: const Text('ลองอีกครั้ง'),
+                              ),
+                            ],
+                          ),
+                        ),
                       ] else if (_reportedDrivers.isEmpty) ...[
                         Container(
                           padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
-                            color: const Color(0xFFF8FAFC),
+                            color: AppTheme.backgroundColor,
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: const Row(
                             children: [
-                              Icon(Icons.info_outline, color: Color(0xFF64748B), size: 20),
+                              Icon(
+                                Icons.info_outline,
+                                color: AppTheme.textSecondary,
+                                size: 20,
+                              ),
                               SizedBox(width: 10),
                               Expanded(
                                 child: Text(
                                   'ไม่มีข้อมูลคนขับที่ระบุในรายงานนี้',
                                   style: TextStyle(
-                                    fontSize: 13,
-                                    color: Color(0xFF64748B),
+                                    fontSize: 14,
+                                    color: AppTheme.textSecondary,
                                   ),
                                 ),
                               ),
@@ -647,7 +747,7 @@ class _HistoryReportDetailsScreenState extends State<HistoryReportDetailsScreen>
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                    border: Border.all(color: AppTheme.borderColor),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -657,7 +757,7 @@ class _HistoryReportDetailsScreenState extends State<HistoryReportDetailsScreen>
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.bold,
-                          color: Color(0xFF0D47A1),
+                          color: AppTheme.primaryColor,
                         ),
                       ),
                       const SizedBox(height: 14),
@@ -669,7 +769,7 @@ class _HistoryReportDetailsScreenState extends State<HistoryReportDetailsScreen>
                             style: TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.bold,
-                              color: Color(0xFF64748B),
+                              color: AppTheme.textSecondary,
                             ),
                           ),
                           Expanded(
@@ -678,7 +778,7 @@ class _HistoryReportDetailsScreenState extends State<HistoryReportDetailsScreen>
                               style: const TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.bold,
-                                color: Color(0xFF0F172A),
+                                color: AppTheme.textPrimary,
                               ),
                             ),
                           ),
@@ -691,7 +791,7 @@ class _HistoryReportDetailsScreenState extends State<HistoryReportDetailsScreen>
                           style: TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.bold,
-                            color: Color(0xFF64748B),
+                            color: AppTheme.textSecondary,
                           ),
                         ),
                         const SizedBox(height: 6),
@@ -699,7 +799,7 @@ class _HistoryReportDetailsScreenState extends State<HistoryReportDetailsScreen>
                           width: double.infinity,
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: const Color(0xFFF8FAFC),
+                            color: AppTheme.backgroundColor,
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(color: const Color(0xFFF1F5F9)),
                           ),
@@ -718,87 +818,38 @@ class _HistoryReportDetailsScreenState extends State<HistoryReportDetailsScreen>
                 ),
                 const SizedBox(height: 24),
 
-                // 5. Two Grid Cards (Actions/Policy)
-                Row(
-                  children: [
-                    Expanded(
-                      child: Container(
-                        padding: const EdgeInsets.all(16),
-                        height: 140,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF8FAFC),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: const Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Icon(
-                              Icons.security_rounded,
-                              color: Color(0xFF0D47A1),
-                              size: 24,
-                            ),
-                            SizedBox(height: 12),
-                            Text(
-                              'SafeSeat Policy',
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFF0F172A),
-                              ),
-                            ),
-                            SizedBox(height: 6),
-                            Text(
-                              'Our safety team is currently investigating your report.',
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: Color(0xFF64748B),
-                                height: 1.4,
-                              ),
-                            ),
-                          ],
+                // Status guidance without implying that a support action is available here.
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primaryColor.withValues(alpha: 0.06),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: AppTheme.borderColor),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(
+                        Icons.info_outline_rounded,
+                        color: AppTheme.primaryColor,
+                        size: 24,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          isResolved
+                              ? 'รายงานนี้ดำเนินการแล้ว คุณสามารถกลับมาดูรายละเอียดได้ทุกเมื่อ'
+                              : 'รายงานของคุณถูกบันทึกแล้ว สามารถกลับมาดูสถานะได้ที่หน้าประวัติ',
+                          style: const TextStyle(
+                            fontSize: 14,
+                            color: AppTheme.textPrimary,
+                            height: 1.4,
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Container(
-                        padding: const EdgeInsets.all(16),
-                        height: 140,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF8FAFC),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: const Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Icon(
-                              Icons.help_outline_rounded,
-                              color: Color(0xFF0D47A1),
-                              size: 24,
-                            ),
-                            SizedBox(height: 12),
-                            Text(
-                              'Need Help?',
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFF0F172A),
-                              ),
-                            ),
-                            SizedBox(height: 6),
-                            Text(
-                              'Chat with our 24/7 support if you have more details.',
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: Color(0xFF64748B),
-                                height: 1.4,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
                 const SizedBox(height: 24),
 
@@ -809,7 +860,7 @@ class _HistoryReportDetailsScreenState extends State<HistoryReportDetailsScreen>
                     style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.bold,
-                      color: Color(0xFF0F172A),
+                      color: AppTheme.textPrimary,
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -820,7 +871,9 @@ class _HistoryReportDetailsScreenState extends State<HistoryReportDetailsScreen>
                       itemCount: imagePaths.length,
                       itemBuilder: (context, index) {
                         final path = imagePaths[index];
-                        final imageUrl = Supabase.instance.client.storage.from('images').getPublicUrl(path);
+                        final imageUrl = Supabase.instance.client.storage
+                            .from('images')
+                            .getPublicUrl(path);
 
                         return GestureDetector(
                           onTap: () {
@@ -841,8 +894,12 @@ class _HistoryReportDetailsScreenState extends State<HistoryReportDetailsScreen>
                                       child: CircleAvatar(
                                         backgroundColor: Colors.black54,
                                         child: IconButton(
-                                          icon: const Icon(Icons.close, color: Colors.white),
-                                          onPressed: () => Navigator.of(context).pop(),
+                                          icon: const Icon(
+                                            Icons.close,
+                                            color: Colors.white,
+                                          ),
+                                          onPressed: () =>
+                                              Navigator.of(context).pop(),
                                         ),
                                       ),
                                     ),
@@ -857,16 +914,20 @@ class _HistoryReportDetailsScreenState extends State<HistoryReportDetailsScreen>
                             height: 100,
                             decoration: BoxDecoration(
                               borderRadius: BorderRadius.circular(16),
-                              border: Border.all(color: const Color(0xFFE2E8F0)),
+                              border: Border.all(color: AppTheme.borderColor),
                             ),
                             child: ClipRRect(
                               borderRadius: BorderRadius.circular(15),
                               child: Image.network(
                                 imageUrl,
                                 fit: BoxFit.cover,
-                                errorBuilder: (context, error, stackTrace) => const Center(
-                                  child: Icon(Icons.broken_image_outlined, color: Colors.grey),
-                                ),
+                                errorBuilder: (context, error, stackTrace) =>
+                                    const Center(
+                                      child: Icon(
+                                        Icons.broken_image_outlined,
+                                        color: Colors.grey,
+                                      ),
+                                    ),
                               ),
                             ),
                           ),

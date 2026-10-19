@@ -2,6 +2,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:safeseat_mini/core/services/geocoding_service.dart';
+import 'package:safeseat_mini/core/theme/app_theme.dart';
 import 'package:safeseat_mini/core/utils/app_feedback.dart';
 import 'package:safeseat_mini/core/utils/validators.dart';
 import 'package:safeseat_mini/core/widgets/driver_avatar.dart';
@@ -21,17 +23,23 @@ class HistoryTripReportScreen extends ConsumerStatefulWidget {
   });
 
   @override
-  ConsumerState<HistoryTripReportScreen> createState() => _HistoryTripReportScreenState();
+  ConsumerState<HistoryTripReportScreen> createState() =>
+      _HistoryTripReportScreenState();
 }
 
-class _HistoryTripReportScreenState extends ConsumerState<HistoryTripReportScreen> {
+class _HistoryTripReportScreenState
+    extends ConsumerState<HistoryTripReportScreen> {
   final _formKey = GlobalKey<FormState>();
   final _descriptionController = TextEditingController();
-  
+
   String? _selectedCategory;
   String _selectedTarget = 'ALL';
   final List<File> _selectedImages = [];
   final _imagePicker = ImagePicker();
+  String? _pickupAddress;
+  String? _dropoffAddress;
+  bool _isLoadingPickupAddress = false;
+  bool _isLoadingDropoffAddress = false;
 
   final List<String> _categories = [
     'พฤติกรรมไม่เหมาะสม',
@@ -44,6 +52,24 @@ class _HistoryTripReportScreenState extends ConsumerState<HistoryTripReportScree
   @override
   void initState() {
     super.initState();
+    _pickupAddress = widget.pickupAddress;
+    _dropoffAddress = widget.dropoffAddress;
+    if (_pickupAddress == null) {
+      _isLoadingPickupAddress = true;
+      _resolveAddress(
+        widget.trip.pickupLatitude,
+        widget.trip.pickupLongitude,
+        isPickup: true,
+      );
+    }
+    if (_dropoffAddress == null) {
+      _isLoadingDropoffAddress = true;
+      _resolveAddress(
+        widget.trip.dropoffLatitude,
+        widget.trip.dropoffLongitude,
+        isPickup: false,
+      );
+    }
     // Initialize default target based on available drivers
     final trip = widget.trip;
     if (trip.leader != null && trip.follower != null) {
@@ -59,13 +85,39 @@ class _HistoryTripReportScreenState extends ConsumerState<HistoryTripReportScree
     _checkExistingReport();
   }
 
+  Future<void> _resolveAddress(
+    double latitude,
+    double longitude, {
+    required bool isPickup,
+  }) async {
+    String? name;
+    try {
+      name = await GeocodingService.reverseGeocode(latitude, longitude);
+    } catch (_) {
+      // The page keeps a readable fallback if the lookup fails.
+    }
+    if (!mounted) return;
+    setState(() {
+      if (isPickup) {
+        _pickupAddress = name;
+        _isLoadingPickupAddress = false;
+      } else {
+        _dropoffAddress = name;
+        _isLoadingDropoffAddress = false;
+      }
+    });
+  }
+
   Future<void> _checkExistingReport() async {
     try {
       final status = await ref
           .read(historyReportControllerProvider.notifier)
           .checkReportStatus(widget.trip.requestId);
       if (status['hasReported'] == true && mounted) {
-        AppSnackBar.showWarning(context, 'รายการนี้เคยถูกรายงานไปแล้ว ไม่สามารถรายงานซ้ำได้');
+        AppSnackBar.showWarning(
+          context,
+          'รายการนี้เคยถูกรายงานไปแล้ว ไม่สามารถรายงานซ้ำได้',
+        );
         Navigator.of(context).pop();
       }
     } catch (_) {}
@@ -79,7 +131,10 @@ class _HistoryTripReportScreenState extends ConsumerState<HistoryTripReportScree
 
   Future<void> _pickImage() async {
     if (_selectedImages.length >= 5) {
-      AppSnackBar.showWarning(context, 'คุณสามารถอัปโหลดรูปภาพหลักฐานได้สูงสุด 5 รูปภาพ');
+      AppSnackBar.showWarning(
+        context,
+        'คุณสามารถอัปโหลดรูปภาพหลักฐานได้สูงสุด 5 รูปภาพ',
+      );
       return;
     }
 
@@ -128,7 +183,10 @@ class _HistoryTripReportScreenState extends ConsumerState<HistoryTripReportScree
     }
 
     // Show standardized loading indicator
-    AppDialog.showLoading(context, message: 'กำลังส่งข้อมูลรายงานและอัปโหลดหลักฐาน...');
+    AppDialog.showLoading(
+      context,
+      message: 'กำลังส่งข้อมูลรายงานและอัปโหลดหลักฐาน...',
+    );
 
     try {
       // 1. Prepare report index based on selected category
@@ -167,13 +225,15 @@ class _HistoryTripReportScreenState extends ConsumerState<HistoryTripReportScree
       }
 
       // 2. Submit via historyReportControllerProvider
-      final success = await ref.read(historyReportControllerProvider.notifier).submitDriverReport(
-        requestId: widget.trip.requestId,
-        reportType: _selectedCategory!,
-        reportDetail: detailText,
-        reportIndex: reportIndex,
-        images: _selectedImages,
-      );
+      final success = await ref
+          .read(historyReportControllerProvider.notifier)
+          .submitDriverReport(
+            requestId: widget.trip.requestId,
+            reportType: _selectedCategory!,
+            reportDetail: detailText,
+            reportIndex: reportIndex,
+            images: _selectedImages,
+          );
 
       if (!mounted) return;
       AppDialog.hideLoading(context);
@@ -184,8 +244,7 @@ class _HistoryTripReportScreenState extends ConsumerState<HistoryTripReportScree
         AppDialog.showSuccess(
           context: context,
           title: 'ส่งรายงานสำเร็จ',
-          message:
-              'ระบบได้รับข้อมูลรายงานความไม่สะดวกของคุณแล้ว ทางเจ้าหน้าที่จะรีบทำการตรวจสอบเหตุการณ์และดำเนินการต่อไปโดยเร็วที่สุด',
+          message: 'ส่งรายงานแล้ว คุณติดตามสถานะได้ในประวัติการเดินทาง',
           buttonText: 'ตกลง',
           onDismiss: () {
             if (mounted) {
@@ -212,49 +271,58 @@ class _HistoryTripReportScreenState extends ConsumerState<HistoryTripReportScree
   Widget build(BuildContext context) {
     final trip = widget.trip;
     final orderCode = '#ORD${trip.requestId.toString().padLeft(4, '0')}';
-    
-    final pickupPoint = widget.pickupAddress ??
-        (trip.note != null && trip.note!.isNotEmpty
-            ? trip.note!
-            : 'จุดรับ (${trip.pickupLatitude.toStringAsFixed(4)}, ${trip.pickupLongitude.toStringAsFixed(4)})');
-    final dropoffPoint = widget.dropoffAddress ??
-        'จุดส่ง (${trip.dropoffLatitude.toStringAsFixed(4)}, ${trip.dropoffLongitude.toStringAsFixed(4)})';
+
+    final pickupPoint = _isLoadingPickupAddress
+        ? 'กำลังค้นหาชื่อสถานที่...'
+        : (_pickupAddress ?? 'ไม่พบชื่อสถานที่');
+    final dropoffPoint = _isLoadingDropoffAddress
+        ? 'กำลังค้นหาชื่อสถานที่...'
+        : (_dropoffAddress ?? 'ไม่พบชื่อสถานที่');
 
     // Build the driver targets list based on available drivers
     final List<DropdownMenuItem<String>> targetItems = [];
     if (trip.leader != null && trip.follower != null) {
-      targetItems.add(const DropdownMenuItem(
-        value: 'ALL',
-        child: Text('ทุกคนในทริปนี้ (ทั้ง 2 คน)'),
-      ));
+      targetItems.add(
+        const DropdownMenuItem(
+          value: 'ALL',
+          child: Text('ทุกคนในทริปนี้ (ทั้ง 2 คน)'),
+        ),
+      );
     }
     if (trip.leader != null) {
-      targetItems.add(DropdownMenuItem(
-        value: 'LEADER',
-        child: Text('คนขับหลัก (${trip.leader!.firstname} ${trip.leader!.lastname})'),
-      ));
+      targetItems.add(
+        DropdownMenuItem(
+          value: 'LEADER',
+          child: Text(
+            'คนขับหลัก (${trip.leader!.firstname} ${trip.leader!.lastname})',
+          ),
+        ),
+      );
     }
     if (trip.follower != null) {
-      targetItems.add(DropdownMenuItem(
-        value: 'FOLLOWER',
-        child: Text('ผู้ช่วยคนขับ (${trip.follower!.firstname} ${trip.follower!.lastname})'),
-      ));
+      targetItems.add(
+        DropdownMenuItem(
+          value: 'FOLLOWER',
+          child: Text(
+            'ผู้ช่วยคนขับ (${trip.follower!.firstname} ${trip.follower!.lastname})',
+          ),
+        ),
+      );
     }
     if (targetItems.isEmpty) {
-      targetItems.add(const DropdownMenuItem(
-        value: 'ALL',
-        child: Text('ผู้ขับรถในทริปนี้'),
-      ));
+      targetItems.add(
+        const DropdownMenuItem(value: 'ALL', child: Text('ผู้ขับรถในทริปนี้')),
+      );
     }
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
         scrolledUnderElevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Color(0xFF0F172A)),
+          icon: const Icon(Icons.arrow_back, color: AppTheme.textPrimary),
           onPressed: () => Navigator.of(context).pop(),
         ),
         title: Column(
@@ -263,7 +331,7 @@ class _HistoryTripReportScreenState extends ConsumerState<HistoryTripReportScree
             const Text(
               'รายงานทริป',
               style: TextStyle(
-                color: Color(0xFF0F172A),
+                color: AppTheme.textPrimary,
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
               ),
@@ -271,7 +339,7 @@ class _HistoryTripReportScreenState extends ConsumerState<HistoryTripReportScree
             Text(
               orderCode,
               style: const TextStyle(
-                color: Color(0xFF64748B),
+                color: AppTheme.textSecondary,
                 fontSize: 12,
                 fontWeight: FontWeight.w500,
               ),
@@ -307,13 +375,21 @@ class _HistoryTripReportScreenState extends ConsumerState<HistoryTripReportScree
                       // Map Pins & Line
                       Column(
                         children: [
-                          const Icon(Icons.location_on, color: Color(0xFF2563EB), size: 20),
+                          const Icon(
+                            Icons.location_on,
+                            color: AppTheme.pickupColor,
+                            size: 20,
+                          ),
                           Container(
                             width: 2,
                             height: 36,
                             color: const Color(0xFFCBD5E1),
                           ),
-                          const Icon(Icons.radio_button_checked, color: Color(0xFF475569), size: 20),
+                          const Icon(
+                            Icons.flag,
+                            color: AppTheme.dropoffColor,
+                            size: 20,
+                          ),
                         ],
                       ),
                       const SizedBox(width: 12),
@@ -325,9 +401,9 @@ class _HistoryTripReportScreenState extends ConsumerState<HistoryTripReportScree
                             const Text(
                               'จุดรับ',
                               style: TextStyle(
-                                fontSize: 10,
+                                fontSize: 12,
                                 fontWeight: FontWeight.bold,
-                                color: Color(0xFF94A3B8),
+                                color: AppTheme.textMuted,
                               ),
                             ),
                             Text(
@@ -337,16 +413,16 @@ class _HistoryTripReportScreenState extends ConsumerState<HistoryTripReportScree
                               style: const TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w600,
-                                color: Color(0xFF0F172A),
+                                color: AppTheme.textPrimary,
                               ),
                             ),
                             const SizedBox(height: 18),
                             const Text(
                               'จุดส่ง',
                               style: TextStyle(
-                                fontSize: 10,
+                                fontSize: 12,
                                 fontWeight: FontWeight.bold,
-                                color: Color(0xFF94A3B8),
+                                color: AppTheme.textMuted,
                               ),
                             ),
                             Text(
@@ -356,7 +432,7 @@ class _HistoryTripReportScreenState extends ConsumerState<HistoryTripReportScree
                               style: const TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w600,
-                                color: Color(0xFF0F172A),
+                                color: AppTheme.textPrimary,
                               ),
                             ),
                           ],
@@ -368,20 +444,20 @@ class _HistoryTripReportScreenState extends ConsumerState<HistoryTripReportScree
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
                           const Text(
-                            'TOTAL DISTANCE',
+                            'ระยะทาง',
                             style: TextStyle(
-                              fontSize: 9,
+                              fontSize: 12,
                               fontWeight: FontWeight.bold,
-                              color: Color(0xFF94A3B8),
+                              color: AppTheme.textMuted,
                             ),
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            '${trip.reqDistance.toStringAsFixed(1)} KM',
+                            '${trip.reqDistance.toStringAsFixed(1)} กม.',
                             style: const TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
-                              color: Color(0xFF0D47A1),
+                              color: AppTheme.primaryColor,
                             ),
                           ),
                         ],
@@ -397,7 +473,7 @@ class _HistoryTripReportScreenState extends ConsumerState<HistoryTripReportScree
                   style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFF0F172A),
+                    color: AppTheme.textPrimary,
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -405,71 +481,95 @@ class _HistoryTripReportScreenState extends ConsumerState<HistoryTripReportScree
                   decoration: BoxDecoration(
                     color: const Color(0xFFF1F5F9).withValues(alpha: 0.5),
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                    border: Border.all(color: AppTheme.borderColor),
                   ),
                   child: Column(
                     children: [
                       if (trip.leader != null) ...[
                         ListTile(
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 8,
+                          ),
                           leading: DriverAvatar(
                             imageUrl: trip.leader!.resolvedImageUrl,
-                            fallbackName: '${trip.leader!.firstname} ${trip.leader!.lastname}',
+                            fallbackName:
+                                '${trip.leader!.firstname} ${trip.leader!.lastname}',
                             radius: 22,
                             badgeText: 'D1',
-                            badgeColor: const Color(0xFF0D47A1),
+                            badgeColor: AppTheme.primaryColor,
                           ),
                           title: Text(
                             '${trip.leader!.firstname} ${trip.leader!.lastname}',
                             style: const TextStyle(
                               fontSize: 15,
                               fontWeight: FontWeight.bold,
-                              color: Color(0xFF0F172A),
+                              color: AppTheme.textPrimary,
                             ),
                           ),
                           subtitle: const Text(
                             'ผู้ขับรถส่งคุณ',
                             style: TextStyle(
                               fontSize: 12,
-                              color: Color(0xFF64748B),
+                              color: AppTheme.textSecondary,
                             ),
                           ),
-                          trailing: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(color: const Color(0xFFE2E8F0)),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  trip.leader!.rating != null ? trip.leader!.rating!.toStringAsFixed(1) : '5.0',
-                                  style: const TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.bold,
-                                    color: Color(0xFF0F172A),
+                          trailing: trip.leader!.rating == null
+                              ? null
+                              : Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(
+                                      color: AppTheme.borderColor,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        trip.leader!.rating!.toStringAsFixed(1),
+                                        style: const TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.bold,
+                                          color: AppTheme.textPrimary,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      const Icon(
+                                        Icons.star,
+                                        color: Colors.amber,
+                                        size: 14,
+                                      ),
+                                    ],
                                   ),
                                 ),
-                                const SizedBox(width: 4),
-                                const Icon(Icons.star, color: Colors.amber, size: 14),
-                              ],
-                            ),
-                          ),
                         ),
                       ],
                       if (trip.follower != null) ...[
                         if (trip.leader != null)
-                          const Divider(height: 1, indent: 16, endIndent: 16, color: Color(0xFFE2E8F0)),
+                          const Divider(
+                            height: 1,
+                            indent: 16,
+                            endIndent: 16,
+                            color: AppTheme.borderColor,
+                          ),
                         ListTile(
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 8,
+                          ),
                           leading: DriverAvatar(
                             imageUrl: trip.follower!.resolvedImageUrl,
-                            fallbackName: '${trip.follower!.firstname} ${trip.follower!.lastname}',
+                            fallbackName:
+                                '${trip.follower!.firstname} ${trip.follower!.lastname}',
                             radius: 22,
                             badgeText: 'D2',
-                            badgeColor: const Color(0xFF64748B),
+                            badgeColor: AppTheme.textSecondary,
                             defaultIcon: Icons.motorcycle,
                           ),
                           title: Text(
@@ -477,39 +577,52 @@ class _HistoryTripReportScreenState extends ConsumerState<HistoryTripReportScree
                             style: const TextStyle(
                               fontSize: 15,
                               fontWeight: FontWeight.bold,
-                              color: Color(0xFF0F172A),
+                              color: AppTheme.textPrimary,
                             ),
                           ),
                           subtitle: const Text(
                             'ผู้ช่วยผู้ขับรถ',
                             style: TextStyle(
                               fontSize: 12,
-                              color: Color(0xFF64748B),
+                              color: AppTheme.textSecondary,
                             ),
                           ),
-                          trailing: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(color: const Color(0xFFE2E8F0)),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  trip.follower!.rating != null ? trip.follower!.rating!.toStringAsFixed(1) : '5.0',
-                                  style: const TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.bold,
-                                    color: Color(0xFF0F172A),
+                          trailing: trip.follower!.rating == null
+                              ? null
+                              : Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(
+                                      color: AppTheme.borderColor,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        trip.follower!.rating!.toStringAsFixed(
+                                          1,
+                                        ),
+                                        style: const TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.bold,
+                                          color: AppTheme.textPrimary,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      const Icon(
+                                        Icons.star,
+                                        color: Colors.amber,
+                                        size: 14,
+                                      ),
+                                    ],
                                   ),
                                 ),
-                                const SizedBox(width: 4),
-                                const Icon(Icons.star, color: Colors.amber, size: 14),
-                              ],
-                            ),
-                          ),
                         ),
                       ],
                     ],
@@ -523,7 +636,7 @@ class _HistoryTripReportScreenState extends ConsumerState<HistoryTripReportScree
                   style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFF0F172A),
+                    color: AppTheme.textPrimary,
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -531,23 +644,32 @@ class _HistoryTripReportScreenState extends ConsumerState<HistoryTripReportScree
                   decoration: InputDecoration(
                     fillColor: Colors.white,
                     filled: true,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 14,
+                    ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                      borderSide: const BorderSide(color: AppTheme.borderColor),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: Color(0xFF0D47A1), width: 1.5),
+                      borderSide: const BorderSide(
+                        color: AppTheme.primaryColor,
+                        width: 1.5,
+                      ),
                     ),
                   ),
                   hint: const Text(
                     'กรุณาเลือกประเภท',
-                    style: TextStyle(color: Color(0xFF94A3B8), fontSize: 14),
+                    style: TextStyle(color: AppTheme.textMuted, fontSize: 14),
                   ),
                   initialValue: _selectedCategory,
                   items: _categories.map((cat) {
-                    return DropdownMenuItem(value: cat, child: Text(cat, style: const TextStyle(fontSize: 14)));
+                    return DropdownMenuItem(
+                      value: cat,
+                      child: Text(cat, style: const TextStyle(fontSize: 14)),
+                    );
                   }).toList(),
                   onChanged: (val) {
                     setState(() {
@@ -562,7 +684,7 @@ class _HistoryTripReportScreenState extends ConsumerState<HistoryTripReportScree
                   style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFF0F172A),
+                    color: AppTheme.textPrimary,
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -570,14 +692,20 @@ class _HistoryTripReportScreenState extends ConsumerState<HistoryTripReportScree
                   decoration: InputDecoration(
                     fillColor: Colors.white,
                     filled: true,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 14,
+                    ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                      borderSide: const BorderSide(color: AppTheme.borderColor),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: Color(0xFF0D47A1), width: 1.5),
+                      borderSide: const BorderSide(
+                        color: AppTheme.primaryColor,
+                        width: 1.5,
+                      ),
                     ),
                   ),
                   initialValue: _selectedTarget,
@@ -595,7 +723,7 @@ class _HistoryTripReportScreenState extends ConsumerState<HistoryTripReportScree
                   style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFF0F172A),
+                    color: AppTheme.textPrimary,
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -608,7 +736,10 @@ class _HistoryTripReportScreenState extends ConsumerState<HistoryTripReportScree
                     fillColor: Colors.white,
                     filled: true,
                     hintText: 'บอกเราสิว่าเกิดอะไรขึ้น...',
-                    hintStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 14),
+                    hintStyle: const TextStyle(
+                      color: AppTheme.textMuted,
+                      fontSize: 14,
+                    ),
                     contentPadding: const EdgeInsets.all(16),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(16),
@@ -616,7 +747,10 @@ class _HistoryTripReportScreenState extends ConsumerState<HistoryTripReportScree
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(16),
-                      borderSide: const BorderSide(color: Color(0xFF0D47A1), width: 1.5),
+                      borderSide: const BorderSide(
+                        color: AppTheme.primaryColor,
+                        width: 1.5,
+                      ),
                     ),
                     errorBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(16),
@@ -636,11 +770,11 @@ class _HistoryTripReportScreenState extends ConsumerState<HistoryTripReportScree
                   style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFF0F172A),
+                    color: AppTheme.textPrimary,
                   ),
                 ),
                 const SizedBox(height: 8),
-                
+
                 // Images Grid List
                 if (_selectedImages.isNotEmpty) ...[
                   SizedBox(
@@ -674,7 +808,11 @@ class _HistoryTripReportScreenState extends ConsumerState<HistoryTripReportScree
                                     color: Colors.red,
                                     shape: BoxShape.circle,
                                   ),
-                                  child: const Icon(Icons.close, size: 14, color: Colors.white),
+                                  child: const Icon(
+                                    Icons.close,
+                                    size: 14,
+                                    color: Colors.white,
+                                  ),
                                 ),
                               ),
                             ),
@@ -706,12 +844,12 @@ class _HistoryTripReportScreenState extends ConsumerState<HistoryTripReportScree
                         Container(
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: const Color(0xFFE2E8F0),
+                            color: AppTheme.borderColor,
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: const Icon(
                             Icons.camera_enhance_outlined,
-                            color: Color(0xFF0D47A1),
+                            color: AppTheme.primaryColor,
                             size: 28,
                           ),
                         ),
@@ -721,7 +859,7 @@ class _HistoryTripReportScreenState extends ConsumerState<HistoryTripReportScree
                           style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.bold,
-                            color: Color(0xFF0F172A),
+                            color: AppTheme.textPrimary,
                           ),
                         ),
                         const SizedBox(height: 4),
@@ -729,14 +867,14 @@ class _HistoryTripReportScreenState extends ConsumerState<HistoryTripReportScree
                           'สูงสุด 5 รูปภาพ',
                           style: TextStyle(
                             fontSize: 12,
-                            color: Color(0xFF64748B),
+                            color: AppTheme.textSecondary,
                           ),
                         ),
                       ],
                     ),
                   ),
                 ),
-                
+
                 const SizedBox(height: 40),
 
                 // 5. Submit Button
@@ -746,7 +884,7 @@ class _HistoryTripReportScreenState extends ConsumerState<HistoryTripReportScree
                   child: ElevatedButton(
                     onPressed: _submitReport,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF0D47A1),
+                      backgroundColor: AppTheme.primaryColor,
                       foregroundColor: Colors.white,
                       elevation: 0,
                       shape: RoundedRectangleBorder(

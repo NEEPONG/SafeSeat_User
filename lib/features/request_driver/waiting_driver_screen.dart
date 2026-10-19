@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:safeseat_mini/core/services/geocoding_service.dart';
 import 'package:safeseat_mini/core/theme/app_theme.dart';
 import 'package:safeseat_mini/core/utils/app_feedback.dart';
 import 'package:safeseat_mini/features/request_driver/controllers/request_driver_controller.dart';
@@ -14,6 +15,8 @@ class WaitingDriverScreen extends ConsumerStatefulWidget {
   final int requestId;
   final String pickupAddress;
   final String dropoffAddress;
+  final LatLng? pickupLatLng;
+  final LatLng? dropoffLatLng;
   final String carDetails;
   final double price;
 
@@ -22,24 +25,53 @@ class WaitingDriverScreen extends ConsumerStatefulWidget {
     required this.requestId,
     required this.pickupAddress,
     required this.dropoffAddress,
+    this.pickupLatLng,
+    this.dropoffLatLng,
     required this.carDetails,
     required this.price,
   });
 
   @override
-  ConsumerState<WaitingDriverScreen> createState() => _WaitingDriverScreenState();
+  ConsumerState<WaitingDriverScreen> createState() =>
+      _WaitingDriverScreenState();
 }
 
-class _WaitingDriverScreenState extends ConsumerState<WaitingDriverScreen> with SingleTickerProviderStateMixin {
+class _WaitingDriverScreenState extends ConsumerState<WaitingDriverScreen>
+    with SingleTickerProviderStateMixin {
   late AnimationController _animationController;
   Timer? _statusTimer;
   bool _isCancelling = false;
-  String _statusMessage = 'กำลังค้นหาคนขับรถที่ดีที่สุดสำหรับคุณ...';
+  String _statusMessage = 'กำลังค้นหาทีมคนขับ...';
   RequestDriverModel? _acceptedRequest;
+  late String _pickupAddress;
+  late String _dropoffAddress;
+
+  bool _needsPlaceLookup(String value) =>
+      value == 'กำลังค้นหาสถานที่...' || value == 'ไม่พบชื่อสถานที่';
+
+  Future<void> _resolvePlace(LatLng point, {required bool pickup}) async {
+    final name = await GeocodingService.reverseGeocodeLatLng(point);
+    if (!mounted) return;
+    setState(() {
+      if (pickup) {
+        _pickupAddress = name ?? 'ไม่พบชื่อสถานที่';
+      } else {
+        _dropoffAddress = name ?? 'ไม่พบชื่อสถานที่';
+      }
+    });
+  }
 
   @override
   void initState() {
     super.initState();
+    _pickupAddress = widget.pickupAddress;
+    _dropoffAddress = widget.dropoffAddress;
+    if (widget.pickupLatLng != null && _needsPlaceLookup(_pickupAddress)) {
+      _resolvePlace(widget.pickupLatLng!, pickup: true);
+    }
+    if (widget.dropoffLatLng != null && _needsPlaceLookup(_dropoffAddress)) {
+      _resolvePlace(widget.dropoffLatLng!, pickup: false);
+    }
     // Setup matching animation (concentric radar rings pulsing)
     _animationController = AnimationController(
       vsync: this,
@@ -74,7 +106,7 @@ class _WaitingDriverScreenState extends ConsumerState<WaitingDriverScreen> with 
           _statusTimer?.cancel();
           if (mounted) {
             setState(() {
-              _statusMessage = 'พบคนขับและรับงานเรียบร้อยแล้ว!';
+              _statusMessage = 'ทีมคนขับรับงานแล้ว';
               _acceptedRequest = request;
             });
             _showSuccessDialog();
@@ -118,7 +150,9 @@ class _WaitingDriverScreenState extends ConsumerState<WaitingDriverScreen> with 
         // Refresh wallet balance to reflect refund
         final user = ref.read(userProvider);
         if (user != null) {
-          ref.read(profileControllerProvider.notifier).getUserProfile(user.phoneNo);
+          ref
+              .read(profileControllerProvider.notifier)
+              .getUserProfile(user.phoneNo);
         }
         AppSnackBar.showSuccess(context, 'ยกเลิกรายการเรียกรถเรียบร้อยแล้ว');
         Navigator.of(context).pop(); // Go back to details
@@ -138,13 +172,19 @@ class _WaitingDriverScreenState extends ConsumerState<WaitingDriverScreen> with 
   void _showSuccessDialog() {
     final leader = _acceptedRequest?.leader;
     final follower = _acceptedRequest?.follower;
-    final leaderName = leader != null ? '${leader.firstname} ${leader.lastname}' : 'คนขับของ SafeSeat';
-    final followerVehicle = follower?.vehicleSummary ?? (leader?.licensePlate != null ? 'ทะเบียน ${leader!.licensePlate}' : 'ไม่ระบุ');
+    final leaderName = leader != null
+        ? '${leader.firstname} ${leader.lastname}'
+        : 'คนขับของ SafeSeat';
+    final followerVehicle =
+        follower?.vehicleSummary ??
+        (leader?.licensePlate != null
+            ? 'ทะเบียน ${leader!.licensePlate}'
+            : 'ไม่ระบุ');
 
     AppDialog.showSuccess(
       context: context,
-      title: 'พบคู่หูคนขับแล้ว!',
-      message: 'คนขับได้ทำการตอบรับงานของคุณเรียบร้อยแล้ว และกำลังเดินทางมาหาคุณ',
+      title: 'พบทีมคนขับแล้ว',
+      message: 'ทีมคนขับรับงานแล้วและกำลังมารับคุณ',
       buttonText: 'ดูสถานะการเดินทาง',
       customContent: Container(
         padding: const EdgeInsets.all(14),
@@ -157,12 +197,19 @@ class _WaitingDriverScreenState extends ConsumerState<WaitingDriverScreen> with 
           children: [
             Row(
               children: [
-                const Icon(Icons.person_rounded, color: AppTheme.primaryColor, size: 20),
+                const Icon(
+                  Icons.person_rounded,
+                  color: AppTheme.primaryColor,
+                  size: 20,
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     'คนขับหลัก: $leaderName',
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                    ),
                   ),
                 ),
               ],
@@ -170,12 +217,19 @@ class _WaitingDriverScreenState extends ConsumerState<WaitingDriverScreen> with 
             const SizedBox(height: 8),
             Row(
               children: [
-                const Icon(Icons.directions_car_rounded, color: Color(0xFF64748B), size: 20),
+                const Icon(
+                  Icons.directions_car_rounded,
+                  color: Color(0xFF64748B),
+                  size: 20,
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     'รถขับตาม: $followerVehicle',
-                    style: const TextStyle(fontSize: 13, color: Color(0xFF475569)),
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: Color(0xFF475569),
+                    ),
                   ),
                 ),
               ],
@@ -199,8 +253,8 @@ class _WaitingDriverScreenState extends ConsumerState<WaitingDriverScreen> with 
           MaterialPageRoute(
             builder: (context) => ActiveTripScreen(
               requestId: widget.requestId,
-              pickupAddress: widget.pickupAddress,
-              dropoffAddress: widget.dropoffAddress,
+              pickupAddress: _pickupAddress,
+              dropoffAddress: _dropoffAddress,
               pickupLatLng: pickupLatLng,
               dropoffLatLng: dropoffLatLng,
               carDetails: widget.carDetails,
@@ -219,198 +273,226 @@ class _WaitingDriverScreenState extends ConsumerState<WaitingDriverScreen> with 
     final themeColor = AppTheme.primaryColor;
 
     return PopScope(
-      canPop: false, // Prevent physical back button, user must explicitly cancel
+      canPop:
+          false, // Prevent physical back button, user must explicitly cancel
       child: Scaffold(
-        backgroundColor: const Color(0xFFF8FAFC),
+        backgroundColor: AppTheme.backgroundColor,
         body: SafeArea(
           child: Padding(
             padding: const EdgeInsets.all(24.0),
-            child: Column(
-              children: [
-                const SizedBox(height: 20),
-                // Premium matching header
-                const Text(
-                  'กำลังจับคู่คนขับรถ',
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF1E293B),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  _statusMessage,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    color: Color(0xFF64748B),
-                  ),
-                ),
-                
-                const Spacer(),
-
-                // Pulsing Radar Search Animation
-                AnimatedBuilder(
-                  animation: _animationController,
-                  builder: (context, child) {
-                    return SizedBox(
-                      width: 200,
-                      height: 200,
-                      child: CustomPaint(
-                        painter: RadarPainter(_animationController.value, themeColor),
-                        child: Center(
-                          child: Container(
-                            width: 60,
-                            height: 60,
-                            decoration: BoxDecoration(
-                              color: themeColor,
-                              shape: BoxShape.circle,
-                              boxShadow: [
-                                BoxShadow(
-                                  color: themeColor.withValues(alpha: 0.3),
-                                  blurRadius: 10,
-                                  spreadRadius: 3,
-                                )
-                              ],
-                            ),
-                            child: const Icon(
-                              Icons.location_searching,
-                              color: Colors.white,
-                              size: 28,
-                            ),
-                          ),
+            child: LayoutBuilder(
+              builder: (context, constraints) => SingleChildScrollView(
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const SizedBox(height: 20),
+                      // Premium matching header
+                      const Text(
+                        'กำลังจับคู่คนขับรถ',
+                        style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.textPrimary,
                         ),
                       ),
-                    );
-                  },
-                ),
+                      const SizedBox(height: 8),
+                      Text(
+                        _statusMessage,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          color: AppTheme.textSecondary,
+                        ),
+                      ),
 
-                const Spacer(),
+                      const SizedBox(height: 20),
 
-                // Ride details summary card
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(24),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.04),
-                        blurRadius: 16,
-                        offset: const Offset(0, 4),
+                      // Pulsing Radar Search Animation
+                      AnimatedBuilder(
+                        animation: _animationController,
+                        builder: (context, child) {
+                          return SizedBox(
+                            width: 200,
+                            height: 200,
+                            child: CustomPaint(
+                              painter: RadarPainter(
+                                _animationController.value,
+                                themeColor,
+                              ),
+                              child: Center(
+                                child: Container(
+                                  width: 60,
+                                  height: 60,
+                                  decoration: BoxDecoration(
+                                    color: themeColor,
+                                    shape: BoxShape.circle,
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: themeColor.withValues(
+                                          alpha: 0.3,
+                                        ),
+                                        blurRadius: 10,
+                                        spreadRadius: 3,
+                                      ),
+                                    ],
+                                  ),
+                                  child: const Icon(
+                                    Icons.location_searching,
+                                    color: Colors.white,
+                                    size: 28,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+
+                      const SizedBox(height: 20),
+
+                      // Ride details summary card
+                      Container(
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: AppTheme.surfaceColor,
+                          borderRadius: BorderRadius.circular(24),
+                          border: Border.all(color: AppTheme.borderColor),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.04),
+                              blurRadius: 16,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          children: [
+                            // Pickup Location
+                            Row(
+                              children: [
+                                Container(
+                                  width: 10,
+                                  height: 10,
+                                  decoration: const BoxDecoration(
+                                    color: AppTheme.pickupColor,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    _pickupAddress,
+                                    style: const TextStyle(
+                                      fontSize: 14,
+                                      color: Color(0xFF475569),
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            // Dropoff Location
+                            Row(
+                              children: [
+                                Container(
+                                  width: 10,
+                                  height: 10,
+                                  decoration: const BoxDecoration(
+                                    color: AppTheme.dropoffColor,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    _dropoffAddress,
+                                    style: const TextStyle(
+                                      fontSize: 14,
+                                      color: Color(0xFF475569),
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const Divider(height: 24),
+                            // Vehicle and fare
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    widget.carDetails,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.bold,
+                                      color: AppTheme.textPrimary,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Text(
+                                  '฿${widget.price.toStringAsFixed(0)}',
+                                  style: TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.bold,
+                                    color: themeColor,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      const SizedBox(height: 24),
+
+                      // Cancel button
+                      SizedBox(
+                        width: double.infinity,
+                        height: 56,
+                        child: ElevatedButton(
+                          onPressed: _isCancelling ? null : _cancelRequest,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFF1F5F9),
+                            foregroundColor: AppTheme.errorColor,
+                            disabledBackgroundColor: Colors.grey[100],
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(28),
+                            ),
+                            elevation: 0,
+                          ),
+                          child: _isCancelling
+                              ? const SizedBox(
+                                  width: 24,
+                                  height: 24,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2.5,
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                      AppTheme.errorColor,
+                                    ),
+                                  ),
+                                )
+                              : const Text(
+                                  'ยกเลิกการเรียก',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                        ),
                       ),
                     ],
                   ),
-                  child: Column(
-                    children: [
-                      // Pickup Location
-                      Row(
-                        children: [
-                          Container(
-                            width: 10,
-                            height: 10,
-                            decoration: const BoxDecoration(
-                              color: Colors.red,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              widget.pickupAddress,
-                              style: const TextStyle(fontSize: 14, color: Color(0xFF475569)),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      // Dropoff Location
-                      Row(
-                        children: [
-                          Container(
-                            width: 10,
-                            height: 10,
-                            decoration: const BoxDecoration(
-                              color: Color(0xFF10B981),
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              widget.dropoffAddress,
-                              style: const TextStyle(fontSize: 14, color: Color(0xFF475569)),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const Divider(height: 24),
-                      // Vehicle and fare
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            widget.carDetails,
-                            style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF1E293B),
-                            ),
-                          ),
-                          Text(
-                            '฿${widget.price.toStringAsFixed(0)}',
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                              color: themeColor,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
                 ),
-
-                const SizedBox(height: 24),
-
-                // Cancel button
-                SizedBox(
-                  width: double.infinity,
-                  height: 56,
-                  child: ElevatedButton(
-                    onPressed: _isCancelling ? null : _cancelRequest,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFF1F5F9),
-                      foregroundColor: const Color(0xFFEF4444),
-                      disabledBackgroundColor: Colors.grey[100],
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(28),
-                      ),
-                      elevation: 0,
-                    ),
-                    child: _isCancelling
-                        ? const SizedBox(
-                            width: 24,
-                            height: 24,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2.5,
-                              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFEF4444)),
-                            ),
-                          )
-                        : const Text(
-                            'ยกเลิกการเรียก',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
         ),
